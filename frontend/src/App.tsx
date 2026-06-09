@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Lightbulb, 
   Layers, 
@@ -19,6 +19,8 @@ import {
 } from 'lucide-react';
 import { useWebSocket } from './hooks/useWebSocket';
 import { api, type SearchResult } from './services/api';
+import { ToastContainer, type Toast, type ToastType } from './components/Toast';
+import { DailyBriefing } from './components/DailyBriefing';
 
 const DEFAULT_WORKSPACE = '00000000-0000-0000-0000-000000000000';
 
@@ -54,6 +56,55 @@ export default function App() {
 
   // Global error notification
   const [appError, setAppError] = useState<string | null>(null);
+
+  // Toast notifications
+  const [toasts, setToasts] = useState<Toast[]>([]);
+
+  const pushToast = (type: ToastType, title: string, message: string) => {
+    const id = `${Date.now()}-${Math.random()}`;
+    setToasts(prev => [...prev.slice(-4), { id, type, title, message }]);
+  };
+
+  const dismissToast = (id: string) => {
+    setToasts(prev => prev.filter(t => t.id !== id));
+  };
+
+  // Track previous dashboard data to detect new items
+  const prevDataRef = useRef<any>(null);
+
+  useEffect(() => {
+    if (!dashboardData) return;
+    const prev = prevDataRef.current;
+
+    if (prev) {
+      // New decision arrived
+      if (dashboardData.decisions?.length > (prev.decisions?.length || 0)) {
+        const newest = dashboardData.decisions[0];
+        pushToast('decision', 'New Decision', newest?.decision_text?.slice(0, 80) || 'A decision was logged.');
+      }
+      // New action item
+      if (dashboardData.actionItems?.length > (prev.actionItems?.length || 0)) {
+        const newest = dashboardData.actionItems[0];
+        pushToast('info', 'Action Item', `${newest?.owner}: ${newest?.task?.slice(0, 60) || 'New task added.'}`);
+      }
+      // New idea
+      if (dashboardData.ideas?.length > (prev.ideas?.length || 0)) {
+        const newest = dashboardData.ideas[0];
+        pushToast('success', 'Idea Captured', newest?.title || 'New idea added to inbox.');
+      }
+      // New project
+      if (dashboardData.projects?.length > (prev.projects?.length || 0)) {
+        const newest = dashboardData.projects[0];
+        pushToast('success', 'Project Created', newest?.title || 'A new project was generated.');
+      }
+      // New blocker
+      if ((dashboardData.blockers?.length || 0) > (prev.blockers?.length || 0)) {
+        pushToast('warning', 'Blocker Detected', 'A task blocker was flagged — check the action items panel.');
+      }
+    }
+
+    prevDataRef.current = dashboardData;
+  }, [dashboardData]);
 
   // Listen for Ctrl+K or Cmd+K
   useEffect(() => {
@@ -172,12 +223,15 @@ export default function App() {
       if (mockSource === 'slack') {
         await api.simulateSlack(mockText, mockSender, mockChannel, DEFAULT_WORKSPACE);
         setWebhookMessage('Slack event processed and broadcasted!');
+        pushToast('success', 'Slack Event', 'Message ingested — Claude is extracting decisions.');
       } else if (mockSource === 'whatsapp') {
         await api.simulateWhatsApp(mockText, mockSender, DEFAULT_WORKSPACE);
         setWebhookMessage('WhatsApp webhook digested and processed!');
+        pushToast('success', 'WhatsApp Event', 'Message ingested — AI processing in progress.');
       } else if (mockSource === 'github') {
         await api.simulateGitHub(mockGithubNum, mockGithubTitle, mockGithubDesc, DEFAULT_WORKSPACE);
         setWebhookMessage(`GitHub PR #${mockGithubNum} ingested!`);
+        pushToast('info', 'GitHub PR', `PR #${mockGithubNum} "${mockGithubTitle.slice(0, 40)}" logged.`);
         setMockGithubNum(prev => prev + 1);
       }
       setMockText('');
@@ -585,6 +639,9 @@ export default function App() {
         {/* PANEL 3: ONBOARDING PDF & WEBHOOK SIMULATOR */}
         <section className="space-y-6 lg:col-span-1">
           
+          {/* AI DAILY BRIEFING */}
+          <DailyBriefing workspaceId={DEFAULT_WORKSPACE} />
+
           {/* AUTO-GENERATE ONBOARDING PDF */}
           <div className="bg-hub-card rounded-xl border border-hub-border p-4">
             <h2 className="text-sm font-bold text-blue-tide uppercase tracking-wider mb-3 pb-2 border-b border-hub-border/60 flex items-center space-x-2">
@@ -773,6 +830,9 @@ export default function App() {
           <span>PostgreSQL + pgvector + Anthropic Claude SDK</span>
         </span>
       </footer>
+
+      {/* TOAST NOTIFICATIONS */}
+      <ToastContainer toasts={toasts} onDismiss={dismissToast} />
 
       {/* MODAL 1: INSTANT IDEA CAPTURE (Cmd+K overlay) */}
       {isIdeaModalOpen && (
