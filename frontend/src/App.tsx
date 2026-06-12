@@ -120,18 +120,11 @@ export default function App() {
 
   // Set default form values for mock simulator
   useEffect(() => {
-    if (mockSource === 'slack') {
-      setMockSender('Rahul');
-      setMockText('We agreed to use PostgreSQL database for our backend. It has pgvector built-in.');
-    } else if (mockSource === 'whatsapp') {
-      setMockSender('+14155238886');
-      setMockText('Sarah should build the React dashboard frontend components by Wednesday.');
-    } else if (mockSource === 'github') {
-      setMockSender('GitHubWebhook');
-      setMockGithubTitle('feat: implement supabase db models');
-      setMockGithubDesc('This PR configures database queries, connections, and runs migrations for PostgreSQL pgvector schemas.');
-    }
-  }, [mockSource]);
+  setMockText('');
+  setMockSender('');
+  setMockGithubTitle('');
+  setMockGithubDesc('');
+}, [mockSource]);
 
   // Handle Idea creation
   const handleCreateIdea = async (e: React.FormEvent) => {
@@ -615,7 +608,7 @@ export default function App() {
                     <button
                       onClick={async () => {
                         try {
-                          await api.updateTaskStatus(item.id, item.status === 'completed' ? 'pending' : 'completed', DEFAULT_WORKSPACE);
+                          await api.updateActionItemStatus(item.id, item.status === 'completed' ? 'pending' : 'completed', DEFAULT_WORKSPACE);
                         } catch (err: any) {
                           setAppError(err.message);
                         }

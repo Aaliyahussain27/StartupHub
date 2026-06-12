@@ -381,8 +381,8 @@ router.post('/projects/from-idea/:ideaId', async (req: Request, res: Response, n
 });
 
 // 8. POST /api/pdf/generate
-router.post('/api/pdf/generate', async (req: Request, res: Response, next: NextFunction) => {
-  try {
+router.post('/pdf/generate', async (req: Request, res: Response, next: NextFunction) => {
+    try {
     const { newHireName } = req.body;
     const workspaceId = req.body.workspaceId || DEFAULT_WORKSPACE_ID;
 
@@ -625,6 +625,113 @@ router.post('/tasks/:id/status', async (req: Request, res: Response, next: NextF
       res.json({ success: true });
     } else {
       res.status(404).json({ error: 'Task not found.' });
+    }
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /briefing
+router.get('/briefing', async (req: Request, res: Response, next: NextFunction) => {
+  const workspaceId = (req.query.workspaceId as string) || DEFAULT_WORKSPACE_ID;
+
+  try {
+    const [decisions, actionItems, tasks, ideas, projects] = await Promise.all([
+      db.getDecisions(workspaceId),
+      db.getActionItems(workspaceId),
+      db.getTasks(workspaceId),
+      db.getIdeas(workspaceId),
+      db.getProjects(workspaceId),
+    ]);
+
+    const { detectBlockers, isClaudeActive } = await import('../services/claude');
+    const blockerReport = await detectBlockers(tasks);
+
+    const pendingActions = actionItems.filter((a: any) => a.status !== 'completed');
+    const inboxIdeas = ideas.filter((i: any) => i.status === 'inbox');
+    const stalledProjects = projects.filter((p: any) => {
+      const projTasks = tasks.filter((t: any) => t.project_id === p.id);
+      return projTasks.length > 0 && projTasks.filter((t: any) => t.status === 'done').length === 0;
+    });
+
+    const context = `
+Workspace Snapshot:
+- Decisions logged: ${decisions.length}
+- Pending action items: ${pendingActions.length} (owners: ${[...new Set(pendingActions.map((a: any) => a.owner))].join(', ') || 'none'})
+- Active projects: ${projects.length}
+- Stalled projects (no done tasks): ${stalledProjects.map((p: any) => p.title).join(', ') || 'none'}
+- Ideas in inbox: ${inboxIdeas.length}
+- Blocked tasks: ${blockerReport.blockedTasks.length}
+- Recent decisions: ${decisions.slice(0, 3).map((d: any) => d.decision_text).join(' | ')}
+- Upcoming deadlines: ${pendingActions.slice(0, 3).map((a: any) => `${a.owner}: "${a.task}" by ${a.deadline}`).join(' | ')}
+    `.trim();
+
+    let summary = '';
+
+    if (isClaudeActive()) {
+      try {
+        const Anthropic = require('@anthropic-ai/sdk');
+        const client = new Anthropic({ apiKey: process.env.CLAUDE_API_KEY });
+        const response = await client.messages.create({
+          model: 'claude-3-5-sonnet-20241022',
+          max_tokens: 400,
+          messages: [{
+            role: 'user',
+            content: `You are a startup workspace assistant. Write a concise daily briefing for the team based on this workspace snapshot. Be direct, specific, and action-oriented. 2-3 sentences max.\n\n${context}`
+          }]
+        });
+        summary = response.content[0]?.type === 'text' ? response.content[0].text : '';
+      } catch (err: any) {
+        log('WARN', `Claude briefing failed: ${err.message}`);
+      }
+    }
+
+    if (!summary) {
+      const parts: string[] = [];
+      if (decisions.length > 0) parts.push(`${decisions.length} decision${decisions.length > 1 ? 's' : ''} logged`);
+      if (pendingActions.length > 0) parts.push(`${pendingActions.length} pending action item${pendingActions.length > 1 ? 's' : ''}`);
+      if (blockerReport.blockedTasks.length > 0) parts.push(`${blockerReport.blockedTasks.length} blocker${blockerReport.blockedTasks.length > 1 ? 's' : ''} need attention`);
+      if (inboxIdeas.length > 0) parts.push(`${inboxIdeas.length} idea${inboxIdeas.length > 1 ? 's' : ''} waiting in inbox`);
+      summary = parts.length > 0
+        ? `Here's what's happening: ${parts.join(', ')}.`
+        : 'Your workspace is up to date. No outstanding items.';
+    }
+
+    const highlights: Array<{ icon: string; text: string }> = [];
+    decisions.slice(0, 2).forEach((d: any) => highlights.push({ icon: 'decision', text: d.decision_text?.slice(0, 80) || 'Decision logged' }));
+    blockerReport.blockedTasks.slice(0, 2).forEach((b: any) => highlights.push({ icon: 'blocker', text: b.reason?.slice(0, 80) || 'Task blocked' }));
+    pendingActions.slice(0, 2).forEach((a: any) => highlights.push({ icon: 'action', text: `${a.owner}: ${a.task?.slice(0, 60)}` }));
+    inboxIdeas.slice(0, 1).forEach((i: any) => highlights.push({ icon: 'idea', text: `Inbox: "${i.title}"` }));
+
+    const hour = new Date().getHours();
+    const greetingWord = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+
+    res.json({
+      greeting: `${greetingWord}, team! Here's your StartupHub briefing.`,
+      summary,
+      highlights: highlights.slice(0, 6),
+      generatedAt: new Date().toISOString(),
+    });
+
+  } catch (err: any) {
+    log('ERROR', `Briefing failed: ${err.message}`);
+    next(err);
+  }
+});
+
+// POST /action-items/:id/status
+router.post('/action-items/:id/status', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params;
+    const { status, workspaceId } = req.body;
+    const activeWorkspaceId = workspaceId || DEFAULT_WORKSPACE_ID;
+
+    const updated = await db.updateActionItemStatus(id, status as 'pending' | 'completed');
+    if (updated) {
+      await broadcastDashboardUpdate(activeWorkspaceId);
+      res.json({ success: true });
+    } else {
+      res.status(404).json({ error: 'Action item not found.' });
     }
   } catch (err) {
     next(err);

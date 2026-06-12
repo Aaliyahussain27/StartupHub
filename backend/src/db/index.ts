@@ -340,99 +340,11 @@ function setupFallbackMode() {
     users: [
       { id: DEFAULT_USER_ID, workspace_id: DEFAULT_WORKSPACE_ID, email: 'founder@startuphub.ai', created_at: new Date() }
     ],
-    messages: [
-      {
-        id: uuidv4(),
-        workspace_id: DEFAULT_WORKSPACE_ID,
-        source: 'slack',
-        channel: '#general',
-        sender: 'Rahul',
-        text: 'We should use PostgreSQL database for our application backend storage. It gives us robustness and we can run pgvector directly.',
-        embedding: new Array(1536).fill(0).map(() => Math.random() - 0.5),
-        timestamp: new Date(Date.now() - 3600000 * 2), // 2 hours ago
-        created_at: new Date()
-      },
-      {
-        id: uuidv4(),
-        workspace_id: DEFAULT_WORKSPACE_ID,
-        source: 'whatsapp',
-        channel: 'Twilio Sandbox',
-        sender: 'Sarah',
-        text: 'Let us decide on the deployment options today. I suggest Vercel for the React frontend because it has preview deployments.',
-        embedding: new Array(1536).fill(0).map(() => Math.random() - 0.5),
-        timestamp: new Date(Date.now() - 3600000 * 1), // 1 hour ago
-        created_at: new Date()
-      }
-    ],
-    decisions: [
-      {
-        id: uuidv4(),
-        workspace_id: DEFAULT_WORKSPACE_ID,
-        decision_text: 'Decision: Use PostgreSQL (Rahul proposed, team agreed)',
-        source_message_id: null,
-        embedding: new Array(1536).fill(0).map(() => Math.random() - 0.5),
-        created_at: new Date(Date.now() - 3600000 * 2)
-      },
-      {
-        id: uuidv4(),
-        workspace_id: DEFAULT_WORKSPACE_ID,
-        decision_text: 'Decision: Deploy React frontend on Vercel (Sarah proposed, team approved)',
-        source_message_id: null,
-        embedding: new Array(1536).fill(0).map(() => Math.random() - 0.5),
-        created_at: new Date(Date.now() - 3600000 * 1)
-      }
-    ],
-    action_items: [
-      {
-        id: uuidv4(),
-        workspace_id: DEFAULT_WORKSPACE_ID,
-        owner: 'Rahul',
-        task: 'Set up Supabase PostgreSQL instance and write table schemas',
-        deadline: 'Friday',
-        status: 'pending',
-        created_at: new Date()
-      },
-      {
-        id: uuidv4(),
-        workspace_id: DEFAULT_WORKSPACE_ID,
-        owner: 'Sarah',
-        task: 'Configure Vite build config and set up Vercel project configuration',
-        deadline: 'Wednesday',
-        status: 'pending',
-        created_at: new Date()
-      }
-    ],
-    daily_digests: [
-      {
-        id: uuidv4(),
-        workspace_id: DEFAULT_WORKSPACE_ID,
-        date: new Date().toISOString().substring(0, 10),
-        summary_text: 'Decided to use PostgreSQL for the database and deploy the frontend on Vercel. Rahul is setting up the DB while Sarah starts on the Vite setup.',
-        created_at: new Date()
-      }
-    ],
-    ideas: [
-      {
-        id: uuidv4(),
-        workspace_id: DEFAULT_WORKSPACE_ID,
-        title: 'AI Customer Support Agent',
-        description: 'An AI chatbot trained on startup documentation that resolves support queries instantly.',
-        source: 'slack',
-        status: 'inbox',
-        embedding: new Array(1536).fill(0).map(() => Math.random() - 0.5),
-        created_at: new Date()
-      },
-      {
-        id: uuidv4(),
-        workspace_id: DEFAULT_WORKSPACE_ID,
-        title: 'Automated Invoicing System',
-        description: 'Send invoices to clients via WhatsApp and track payments automatically using Stripe webhooks.',
-        source: 'whatsapp',
-        status: 'inbox',
-        embedding: new Array(1536).fill(0).map(() => Math.random() - 0.5),
-        created_at: new Date()
-      }
-    ],
+    messages: [],
+    decisions: [],
+    action_items: [],
+    daily_digests: [],
+    ideas: [],
     projects: [],
     tasks: [],
     github_prs: [],

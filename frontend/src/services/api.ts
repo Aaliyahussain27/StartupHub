@@ -105,5 +105,15 @@ export const api = {
     });
     if (!res.ok) throw new Error('Simulating GitHub webhook failed');
     return res.text();
-  }
+  },
+
+  updateActionItemStatus: async (itemId: string, status: 'pending' | 'completed', workspaceId: string = '00000000-0000-0000-0000-000000000000') => {
+  const res = await fetch(`${BACKEND_URL}/api/action-items/${itemId}/status`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status, workspaceId })
+  });
+  if (!res.ok) throw new Error('Failed to update action item status');
+  return res.json();
+}
 };
