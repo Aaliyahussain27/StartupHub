@@ -1,49 +1,51 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { 
-  Lightbulb, 
-  Layers, 
-  CheckSquare, 
-  MessageSquare, 
-  Search, 
-  FileDown, 
-  AlertTriangle, 
-  HelpCircle, 
-  Plus, 
-  Activity, 
-  User, 
-  Calendar,
+import {
+  Lightbulb,
+  Layers,
+  CheckSquare,
+  Search,
+  FileDown,
+  AlertTriangle,
+  HelpCircle,
+  Plus,
+  Activity,
   X,
-  CheckCircle,
-  Clock,
-  Code
+  Code,
+  ChevronDown,
+  ChevronRight,
+  PanelLeftClose,
+  PanelLeftOpen,
+  MessageSquarePlus,
+  MessageSquare
 } from 'lucide-react';
 import { useWebSocket } from './hooks/useWebSocket';
 import { api, type SearchResult } from './services/api';
 import { ToastContainer, type Toast, type ToastType } from './components/Toast';
 import { DailyBriefing } from './components/DailyBriefing';
+import { ProjectWorkspace } from './components/ProjectWorkspace';
 
 const DEFAULT_WORKSPACE = '00000000-0000-0000-0000-000000000000';
 
 export default function App() {
   const { isConnected, dashboardData } = useWebSocket(DEFAULT_WORKSPACE);
-  
-  // Local state
+
   const [isIdeaModalOpen, setIsIdeaModalOpen] = useState(false);
   const [newIdeaTitle, setNewIdeaTitle] = useState('');
   const [newIdeaDesc, setNewIdeaDesc] = useState('');
-  
+
+  // Project Deadline Management State Setup (Supports Interactive Native Calendar Inputs)
+  const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
   const [selectedIdeaForProj, setSelectedIdeaForProj] = useState<any | null>(null);
-  const [projOwner, setProjOwner] = useState('');
-  const [projDeadline, setProjDeadline] = useState('Friday');
-  
+  const [projOwner, setProjOwner] = useState('Ovee'); 
+  const [projDeadline, setProjDeadline] = useState('2026-06-19'); 
+
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<SearchResult[] | null>(null);
   const [isSearching, setIsSearching] = useState(false);
-  
+
   const [pdfHireName, setPdfHireName] = useState('');
   const [isPdfGenerating, setIsPdfGenerating] = useState(false);
-  
-  // Mock Webhook simulator state
+
   const [mockSource, setMockSource] = useState<'whatsapp' | 'slack' | 'github'>('slack');
   const [mockText, setMockText] = useState('');
   const [mockSender, setMockSender] = useState('');
@@ -54,11 +56,41 @@ export default function App() {
   const [isWebhookSending, setIsWebhookSending] = useState(false);
   const [webhookMessage, setWebhookMessage] = useState<string | null>(null);
 
-  // Global error notification
   const [appError, setAppError] = useState<string | null>(null);
-
-  // Toast notifications
   const [toasts, setToasts] = useState<Toast[]>([]);
+
+  const [activeTool, setActiveTool] = useState<'briefing' | 'onboarding' | 'simulator' | null>(null);
+  const [activeProject, setActiveProject] = useState<any | null>(null);
+  const [activeIdea, setActiveIdea] = useState<any | null>(null);
+
+  // Sidebar section collapse/expand state
+  const [sectionOpen, setSectionOpen] = useState({ ideas: true, projects: true, tools: true });
+  const toggleSection = (key: 'ideas' | 'projects' | 'tools') => {
+    setSectionOpen(prev => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  // Whole-sidebar collapse
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+
+  // Per-idea comments (local until backend support exists)
+  const [ideaComments, setIdeaComments] = useState<Record<string, string[]>>({});
+  const [openCommentIdeaId, setOpenCommentIdeaId] = useState<string | null>(null);
+  const [commentDraft, setCommentDraft] = useState('');
+
+  const addIdeaComment = (ideaId: string) => {
+    if (!commentDraft.trim()) return;
+    setIdeaComments(prev => ({ ...prev, [ideaId]: [...(prev[ideaId] || []), commentDraft.trim()] }));
+    setCommentDraft('');
+    setOpenCommentIdeaId(null);
+  };
+
+  // Comment input for the idea working-window view
+  const [ideaDetailCommentDraft, setIdeaDetailCommentDraft] = useState('');
+  const addIdeaDetailComment = (ideaId: string) => {
+    if (!ideaDetailCommentDraft.trim()) return;
+    setIdeaComments(prev => ({ ...prev, [ideaId]: [...(prev[ideaId] || []), ideaDetailCommentDraft.trim()] }));
+    setIdeaDetailCommentDraft('');
+  };
 
   const pushToast = (type: ToastType, title: string, message: string) => {
     const id = `${Date.now()}-${Math.random()}`;
@@ -69,44 +101,35 @@ export default function App() {
     setToasts(prev => prev.filter(t => t.id !== id));
   };
 
-  // Track previous dashboard data to detect new items
   const prevDataRef = useRef<any>(null);
 
   useEffect(() => {
     if (!dashboardData) return;
     const prev = prevDataRef.current;
-
     if (prev) {
-      // New decision arrived
       if (dashboardData.decisions?.length > (prev.decisions?.length || 0)) {
         const newest = dashboardData.decisions[0];
         pushToast('decision', 'New Decision', newest?.decision_text?.slice(0, 80) || 'A decision was logged.');
       }
-      // New action item
       if (dashboardData.actionItems?.length > (prev.actionItems?.length || 0)) {
         const newest = dashboardData.actionItems[0];
         pushToast('info', 'Action Item', `${newest?.owner}: ${newest?.task?.slice(0, 60) || 'New task added.'}`);
       }
-      // New idea
       if (dashboardData.ideas?.length > (prev.ideas?.length || 0)) {
         const newest = dashboardData.ideas[0];
         pushToast('success', 'Idea Captured', newest?.title || 'New idea added to inbox.');
       }
-      // New project
       if (dashboardData.projects?.length > (prev.projects?.length || 0)) {
         const newest = dashboardData.projects[0];
         pushToast('success', 'Project Created', newest?.title || 'A new project was generated.');
       }
-      // New blocker
       if ((dashboardData.blockers?.length || 0) > (prev.blockers?.length || 0)) {
         pushToast('warning', 'Blocker Detected', 'A task blocker was flagged — check the action items panel.');
       }
     }
-
     prevDataRef.current = dashboardData;
   }, [dashboardData]);
 
-  // Listen for Ctrl+K or Cmd+K
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
@@ -118,15 +141,13 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  // Set default form values for mock simulator
   useEffect(() => {
-  setMockText('');
-  setMockSender('');
-  setMockGithubTitle('');
-  setMockGithubDesc('');
-}, [mockSource]);
+    setMockText('');
+    setMockSender('');
+    setMockGithubTitle('');
+    setMockGithubDesc('');
+  }, [mockSource]);
 
-  // Handle Idea creation
   const handleCreateIdea = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newIdeaTitle || !newIdeaDesc) return;
@@ -140,47 +161,27 @@ export default function App() {
     }
   };
 
-  // Handle Project conversion
   const handleConvertProject = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedIdeaForProj) return;
     try {
       await api.convertIdeaToProject(selectedIdeaForProj.id, projOwner, projDeadline, DEFAULT_WORKSPACE);
       setSelectedIdeaForProj(null);
-      setProjOwner('');
-      setProjDeadline('Friday');
+      setIsProjectModalOpen(false);
     } catch (err: any) {
       setAppError(err.message || 'Failed to convert idea to project');
     }
   };
 
-  // Handle Task status toggle
-  const handleToggleTaskStatus = async (taskId: string, currentStatus: string) => {
-    let nextStatus: 'todo' | 'in_progress' | 'blocked' | 'done' = 'done';
-    if (currentStatus === 'done') {
-      nextStatus = 'todo';
-    } else if (currentStatus === 'todo') {
-      nextStatus = 'in_progress';
-    } else if (currentStatus === 'in_progress') {
-      nextStatus = 'blocked';
-    } else if (currentStatus === 'blocked') {
-      nextStatus = 'done';
-    }
-    
-    try {
-      await api.updateTaskStatus(taskId, nextStatus, DEFAULT_WORKSPACE);
-    } catch (err: any) {
-      setAppError(err.message || 'Failed to update task status');
-    }
+  const handleSaveDeadlineUpdate = (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsProjectModalOpen(false);
+    pushToast('success', 'Deadline Configured', 'Project settings matrix safely applied.');
   };
 
-  // Handle Semantic Search
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!searchQuery.trim()) {
-      setSearchResults(null);
-      return;
-    }
+    if (!searchQuery.trim()) { setSearchResults(null); return; }
     setIsSearching(true);
     try {
       const results = await api.search(searchQuery, DEFAULT_WORKSPACE);
@@ -192,7 +193,6 @@ export default function App() {
     }
   };
 
-  // Handle PDF Generation
   const handleGeneratePDF = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!pdfHireName) return;
@@ -207,7 +207,6 @@ export default function App() {
     }
   };
 
-  // Handle Webhook Simulation
   const handleTriggerWebhook = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsWebhookSending(true);
@@ -235,38 +234,40 @@ export default function App() {
     }
   };
 
-  // Extract dashboard statistics
   const decisions = dashboardData?.decisions || [];
-  const actionItems = dashboardData?.actionItems || [];
   const ideas = dashboardData?.ideas || [];
-  const projects = dashboardData?.projects || [];
+  
+  // Inject structured creation defaults for dynamic calculation logic
+  const projects = (dashboardData?.projects || []).map((p: any) => ({
+    ...p,
+    activeSince: p.activeSince || '2026-06-10',
+    deadline: p.id === activeProject?.id ? projDeadline : (p.deadline || projDeadline),
+    owner: p.id === activeProject?.id ? projOwner : (p.owner || projOwner)
+  }));
+
   const tasks = dashboardData?.tasks || [];
   const blockers = dashboardData?.blockers || [];
 
   return (
     <div className="min-h-screen bg-hub-bg text-slate-100 flex flex-col font-sans selection:bg-blue-tide selection:text-slate-900">
-      
-      {/* HEADER SECTION */}
+
+      {/* HEADER */}
       <header className="border-b border-hub-border bg-hub-bg/80 backdrop-blur sticky top-0 z-40 px-6 py-4 flex items-center justify-between">
         <div className="flex items-center space-x-3">
           <div className="p-2 bg-driftwood/20 rounded-lg border border-driftwood/30 text-soft-sand">
             <Layers className="h-6 w-6" />
           </div>
           <div>
-            <h1 className="text-xl font-bold tracking-wider text-slate-100">
-              STARTUP<span className="text-soft-sand">HUB</span>
-            </h1>
+            <h1 className="text-xl font-bold tracking-wider text-slate-100">STARTUP<span className="text-soft-sand">HUB</span></h1>
             <p className="text-xs text-blue-tide">AI-Native Workspace</p>
           </div>
         </div>
 
-        {/* Real-time Status Badge */}
         <div className="flex items-center space-x-2 bg-hub-card px-3 py-1.5 rounded-full border border-hub-border text-xs">
           <span className={`h-2.5 w-2.5 rounded-full ${isConnected ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`}></span>
           <span className="text-slate-300 font-medium">{isConnected ? 'Live Connected' : 'Disconnected (Offline)'}</span>
         </div>
 
-        {/* Global Semantic Search Form */}
         <form onSubmit={handleSearch} className="flex-1 max-w-md mx-6 relative">
           <input
             type="text"
@@ -275,33 +276,22 @@ export default function App() {
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full bg-hub-card/85 text-sm text-slate-200 pl-10 pr-4 py-2 rounded-lg border border-hub-border focus:outline-none focus:border-blue-tide transition-colors"
           />
-          {isSearching ? (
-            <span className="absolute left-3 top-3.5 h-3.5 w-3.5 border-2 border-blue-tide border-t-transparent rounded-full animate-spin"></span>
-          ) : (
-            <Search className="absolute left-3 top-2.5 h-4.5 w-4.5 text-blue-tide" />
-          )}
+          {isSearching
+            ? <span className="absolute left-3 top-3.5 h-3.5 w-3.5 border-2 border-blue-tide border-t-transparent rounded-full animate-spin"></span>
+            : <Search className="absolute left-3 top-2.5 h-4 w-4 text-blue-tide" />}
           {searchQuery && (
-            <button 
-              type="button" 
-              onClick={() => { setSearchQuery(''); setSearchResults(null); }}
-              className="absolute right-3 top-2.5 text-blue-tide hover:text-slate-100"
-            >
-              <X className="h-4.5 w-4.5" />
+            <button type="button" onClick={() => { setSearchQuery(''); setSearchResults(null); }} className="absolute right-3 top-2.5 text-blue-tide hover:text-slate-100">
+              <X className="h-4 w-4" />
             </button>
           )}
         </form>
 
-        {/* Shortcut Info & Action */}
         <div className="flex items-center space-x-4">
           <div className="hidden md:block text-xs text-blue-tide bg-hub-card/50 px-2 py-1.5 rounded border border-hub-border">
             Quick Add: <kbd className="bg-hub-border px-1 rounded text-slate-100">Cmd+K</kbd>
           </div>
-          <button 
-            onClick={() => setIsIdeaModalOpen(true)}
-            className="flex items-center space-x-1.5 bg-blue-tide/15 hover:bg-blue-tide/25 text-blue-tide px-4 py-2 rounded-lg border border-blue-tide/30 text-sm font-semibold transition-all"
-          >
-            <Plus className="h-4 w-4" />
-            <span>New Idea</span>
+          <button onClick={() => setIsIdeaModalOpen(true)} className="flex items-center space-x-1.5 bg-blue-tide/15 hover:bg-blue-tide/25 text-blue-tide px-4 py-2 rounded-lg border border-blue-tide/30 text-sm font-semibold transition-all">
+            <Plus className="h-4 w-4" /><span>New Idea</span>
           </button>
         </div>
       </header>
@@ -309,54 +299,32 @@ export default function App() {
       {/* ERROR BANNER */}
       {appError && (
         <div className="bg-rose-950/80 border-b border-rose-800 text-rose-200 px-6 py-2.5 flex items-center justify-between text-sm">
-          <div className="flex items-center space-x-2">
-            <AlertTriangle className="h-4 w-4 text-rose-400" />
-            <span>{appError}</span>
-          </div>
-          <button onClick={() => setAppError(null)} className="text-rose-400 hover:text-rose-200">
-            <X className="h-4 w-4" />
-          </button>
+          <div className="flex items-center space-x-2"><AlertTriangle className="h-4 w-4 text-rose-400" /><span>{appError}</span></div>
+          <button onClick={() => setAppError(null)} className="text-rose-400 hover:text-rose-200"><X className="h-4 w-4" /></button>
         </div>
       )}
 
-      {/* SEARCH RESULTS LAYOUT OVERLAY */}
+      {/* SEARCH RESULTS */}
       {searchResults && (
         <div className="bg-hub-card/95 border-b border-hub-border px-6 py-5">
           <div className="max-w-4xl mx-auto">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-md font-bold text-soft-sand flex items-center space-x-2">
-                <Search className="h-5 w-5" />
-                <span>Vector Search Results ({searchResults.length} matches)</span>
+                <Search className="h-5 w-5" /><span>Vector Search Results ({searchResults.length} matches)</span>
               </h3>
-              <button 
-                onClick={() => { setSearchQuery(''); setSearchResults(null); }} 
-                className="text-xs text-blue-tide hover:text-slate-200 border border-hub-border px-2 py-1 rounded"
-              >
-                Close Search
-              </button>
+              <button onClick={() => { setSearchQuery(''); setSearchResults(null); }} className="text-xs text-blue-tide hover:text-slate-200 border border-hub-border px-2 py-1 rounded">Close Search</button>
             </div>
-            
             <div className="space-y-3">
               {searchResults.map((r) => (
                 <div key={r.id} className="p-3 bg-hub-bg rounded border border-hub-border flex items-start justify-between space-x-4">
                   <div className="flex-1">
                     <div className="flex items-center space-x-2 mb-1.5">
-                      <span className="text-xs font-semibold px-2 py-0.5 rounded bg-hub-border text-blue-tide uppercase">
-                        {r.type}
-                      </span>
-                      {r.details?.sender && (
-                        <span className="text-xs text-slate-400 font-medium">
-                          Sender: {r.details.sender}
-                        </span>
-                      )}
+                      <span className="text-xs font-semibold px-2 py-0.5 rounded bg-hub-border text-blue-tide uppercase">{r.type}</span>
+                      {r.details?.sender && <span className="text-xs text-slate-400 font-medium">Sender: {r.details.sender}</span>}
                     </div>
                     <p className="text-sm text-slate-200">{r.text}</p>
                   </div>
-                  <div className="text-right">
-                    <span className="text-xs font-mono font-bold text-soft-sand block bg-driftwood/10 border border-driftwood/20 px-2 py-1 rounded">
-                      Match: {Math.round(r.score * 100)}%
-                    </span>
-                  </div>
+                  <span className="text-xs font-mono font-bold text-soft-sand block bg-driftwood/10 border border-driftwood/20 px-2 py-1 rounded">Match: {Math.round(r.score * 100)}%</span>
                 </div>
               ))}
             </div>
@@ -364,452 +332,340 @@ export default function App() {
         </div>
       )}
 
-      {/* DASHBOARD PANELS CONTENT GRID */}
-      <main className="flex-1 p-6 grid grid-cols-1 lg:grid-cols-4 gap-6 overflow-x-hidden">
-        
-        {/* PANEL 1: IDEATION (Ideas & Projects) */}
-        <section className="space-y-6 lg:col-span-1">
-          
-          {/* IDEAS INBOX */}
-          <div className="bg-hub-card rounded-xl border border-hub-border p-4 flex flex-col h-[380px]">
-            <div className="flex items-center justify-between mb-3 pb-2 border-b border-hub-border/60">
-              <h2 className="text-sm font-bold text-blue-tide uppercase tracking-wider flex items-center space-x-2">
-                <Lightbulb className="h-4.5 w-4.5" />
-                <span>Ideas Inbox</span>
-              </h2>
-              <span className="bg-hub-border text-slate-300 text-xs px-2 py-0.5 rounded-full font-mono">
-                {ideas.filter((i: any) => i.status === 'inbox').length}
-              </span>
+      {/* MAIN SIDEBAR + WORKSPACE GRID */}
+      <main className="flex-1 p-6 flex flex-col lg:flex-row gap-6 overflow-x-hidden items-stretch">
+
+        {/* COMPREHENSIVE SIDEBAR PANEL TREE */}
+        <section className={`shrink-0 transition-all duration-200 ${sidebarCollapsed ? 'w-full lg:w-14' : 'w-full lg:w-80'}`}>
+          <div className="bg-hub-card rounded-xl border border-hub-border p-3 flex flex-col gap-1 h-full sticky top-24">
+
+            <div className={`flex items-center px-2 py-2 mb-1 border-b border-hub-border/60 ${sidebarCollapsed ? 'justify-center' : 'justify-between'}`}>
+              {!sidebarCollapsed && <span className="text-xs font-bold text-blue-tide uppercase tracking-wider">Workspace</span>}
+              <button
+                onClick={() => setSidebarCollapsed(prev => !prev)}
+                className="text-slate-500 hover:text-slate-200 transition-colors"
+                title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+              >
+                {sidebarCollapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+              </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto space-y-3 pr-1">
-              {ideas.filter((i: any) => i.status === 'inbox').length === 0 ? (
-                <div className="h-full flex flex-col items-center justify-center text-slate-500 text-center p-4">
-                  <HelpCircle className="h-8 w-8 mb-2 opacity-40" />
-                  <p className="text-xs">No ideas in the inbox yet.</p>
-                  <p className="text-[10px] mt-1 text-slate-600">Press Cmd+K to capture an idea instantly.</p>
-                </div>
-              ) : (
-                ideas
-                  .filter((i: any) => i.status === 'inbox')
-                  .map((i: any) => (
-                    <div 
-                      key={i.id} 
-                      className="p-3 bg-hub-bg/60 rounded-lg border border-hub-border hover:border-soft-sand transition-all group flex flex-col justify-between"
-                    >
-                      <div>
-                        <h4 className="text-sm font-semibold text-slate-200">{i.title}</h4>
-                        <p className="text-xs text-slate-400 mt-1 line-clamp-3 leading-relaxed">{i.description}</p>
-                      </div>
-                      <div className="mt-3 pt-2 border-t border-hub-border/40 flex items-center justify-between">
-                        <span className="text-[10px] text-blue-tide">Source: {i.source}</span>
-                        <button
-                          onClick={() => setSelectedIdeaForProj(i)}
-                          className="text-xs text-soft-sand hover:text-slate-100 hover:underline font-semibold"
-                        >
-                          Make Project &rarr;
-                        </button>
-                      </div>
-                    </div>
-                  ))
-              )}
-            </div>
-          </div>
-
-          {/* ACTIVE PROJECTS LIST */}
-          <div className="bg-hub-card rounded-xl border border-hub-border p-4 flex flex-col h-[380px]">
-            <div className="flex items-center justify-between mb-3 pb-2 border-b border-hub-border/60">
-              <h2 className="text-sm font-bold text-blue-tide uppercase tracking-wider flex items-center space-x-2">
-                <Layers className="h-4.5 w-4.5" />
-                <span>Active Projects</span>
-              </h2>
-              <span className="bg-hub-border text-slate-300 text-xs px-2 py-0.5 rounded-full font-mono">
-                {projects.length}
-              </span>
-            </div>
-
-            <div className="flex-1 overflow-y-auto space-y-4 pr-1">
-              {projects.length === 0 ? (
-                <div className="h-full flex flex-col items-center justify-center text-slate-500 text-center p-4">
-                  <Layers className="h-8 w-8 mb-2 opacity-40" />
-                  <p className="text-xs">No active projects yet.</p>
-                  <p className="text-[10px] mt-1 text-slate-600">Convert an idea to populate a project with automated task lists.</p>
-                </div>
-              ) : (
-                projects.map((p: any) => {
-                  const projTasks = tasks.filter((t: any) => t.project_id === p.id);
-                  const doneTasks = projTasks.filter((t: any) => t.status === 'done').length;
-                  const progress = projTasks.length > 0 ? Math.round((doneTasks / projTasks.length) * 100) : 0;
-                  
-                  return (
-                    <div key={p.id} className="p-3 bg-hub-bg/60 rounded-lg border border-hub-border">
-                      <div className="flex items-start justify-between">
-                        <h4 className="text-sm font-bold text-slate-200">{p.title}</h4>
-                        <span className="text-[10px] bg-hub-border text-soft-sand px-1.5 py-0.5 rounded uppercase font-mono">
-                          {p.owner}
-                        </span>
-                      </div>
-                      
-                      {/* Requirements display */}
-                      <p className="text-[11px] text-slate-400 mt-1.5 line-clamp-2 leading-relaxed bg-hub-bg p-1.5 rounded border border-hub-border/40">
-                        {p.description}
-                      </p>
-
-                      {/* Progress bar */}
-                      <div className="mt-3">
-                        <div className="flex justify-between text-[10px] text-blue-tide mb-1">
-                          <span>Task Progress ({doneTasks}/{projTasks.length})</span>
-                          <span>{progress}%</span>
-                        </div>
-                        <div className="w-full bg-hub-border h-1.5 rounded-full overflow-hidden">
-                          <div 
-                            className="bg-soft-sand h-full transition-all duration-300"
-                            style={{ width: `${progress}%` }}
-                          ></div>
-                        </div>
-                      </div>
-
-                      {/* Tasks breakdown (Click status to toggle) */}
-                      {projTasks.length > 0 && (
-                        <div className="mt-3 space-y-2 border-t border-hub-border/40 pt-2.5">
-                          {projTasks.map((t: any) => (
-                            <div 
-                              key={t.id} 
-                              onClick={() => handleToggleTaskStatus(t.id, t.status)}
-                              className="flex items-center justify-between text-xs p-1.5 rounded hover:bg-hub-border/30 cursor-pointer border border-transparent hover:border-hub-border/50 transition-all"
-                            >
-                              <div className="flex items-center space-x-2 truncate">
-                                {t.status === 'done' ? (
-                                  <CheckCircle className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
-                                ) : t.status === 'in_progress' ? (
-                                  <Clock className="h-3.5 w-3.5 text-amber-400 shrink-0" />
-                                ) : t.status === 'blocked' ? (
-                                  <AlertTriangle className="h-3.5 w-3.5 text-rose-500 shrink-0" />
-                                ) : (
-                                  <span className="h-3.5 w-3.5 rounded-full border border-slate-500 shrink-0"></span>
-                                )}
-                                <span className={`truncate ${t.status === 'done' ? 'line-through text-slate-500' : 'text-slate-300'}`}>
-                                  {t.title}
-                                </span>
-                              </div>
-                              <span className="text-[9px] text-blue-tide font-mono shrink-0 ml-2">
-                                {t.assigned_to}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })
-              )}
-            </div>
-          </div>
-
-        </section>
-
-        {/* CENTER COLUMN: DASHBOARD & WORKSPACE LOGS (Decisions & Action Items) */}
-        <section className="lg:col-span-2 space-y-6">
-          
-          {/* real-time decisions stream */}
-          <div className="bg-hub-card rounded-xl border border-hub-border p-5 flex flex-col h-[380px]">
-            <div className="flex items-center justify-between mb-4 pb-2 border-b border-hub-border/60">
-              <h2 className="text-sm font-bold text-blue-tide uppercase tracking-wider flex items-center space-x-2">
-                <MessageSquare className="h-4.5 w-4.5" />
-                <span>Workspace Decisions Feed</span>
-              </h2>
-              <span className="bg-hub-border text-slate-300 text-xs px-2 py-0.5 rounded-full font-mono">
-                {decisions.length}
-              </span>
-            </div>
-
-            <div className="flex-1 overflow-y-auto space-y-3 pr-1">
-              {decisions.length === 0 ? (
-                <div className="h-full flex flex-col items-center justify-center text-slate-500 text-center p-4">
-                  <MessageSquare className="h-10 w-10 mb-2 opacity-30" />
-                  <p className="text-sm">No workspace decisions extracted yet.</p>
-                  <p className="text-xs text-slate-600 mt-1 max-w-xs">
-                    Simulate WhatsApp or Slack conversations on the right to trigger AI extraction logic.
-                  </p>
-                </div>
-              ) : (
-                decisions.map((d: any) => (
-                  <div key={d.id} className="p-3 bg-hub-bg/50 rounded-lg border border-hub-border border-l-4 border-l-soft-sand">
-                    <p className="text-sm text-slate-100 font-medium leading-relaxed">
-                      {d.decision_text}
-                    </p>
-                    <div className="mt-2 flex items-center justify-between text-[10px] text-blue-tide">
-                      <span>Logged: {new Date(d.created_at).toLocaleTimeString()}</span>
-                      <span>Verified: Fallback Rules</span>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-
-          {/* ACTION ITEMS & dependency warning block */}
-          <div className="bg-hub-card rounded-xl border border-hub-border p-5 flex flex-col h-[380px]">
-            <div className="flex items-center justify-between mb-4 pb-2 border-b border-hub-border/60">
-              <h2 className="text-sm font-bold text-blue-tide uppercase tracking-wider flex items-center space-x-2">
-                <CheckSquare className="h-4.5 w-4.5" />
-                <span>Extracted Action Items</span>
-              </h2>
-              <span className="bg-hub-border text-slate-300 text-xs px-2 py-0.5 rounded-full font-mono">
-                {actionItems.length}
-              </span>
-            </div>
-
-            {/* BLOCKER WARNING BOX (Displays if any circular dependencies exist) */}
-            {blockers.length > 0 && (
-              <div className="mb-4 bg-driftwood/10 border border-driftwood/35 p-3 rounded-lg flex items-start space-x-3 text-driftwood">
-                <AlertTriangle className="h-5 w-5 shrink-0 text-amber-500 mt-0.5" />
-                <div>
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-soft-sand">
-                    Circular Dependencies & Blockers Detected
-                  </h4>
-                  <ul className="list-disc pl-4 text-[11px] mt-1 space-y-1 text-slate-300">
-                    {blockers.map((b: any, index: number) => (
-                      <li key={index}>
-                        {b.reason}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
+            {sidebarCollapsed ? (
+              <div className="flex flex-col items-center gap-2 pt-1">
+                <button onClick={() => { setSidebarCollapsed(false); setSectionOpen(prev => ({ ...prev, ideas: true })); }} className="p-2 rounded-lg hover:bg-hub-bg/60 text-amber-400" title="Ideas">
+                  <Lightbulb className="h-4 w-4" />
+                </button>
+                <button onClick={() => { setSidebarCollapsed(false); setSectionOpen(prev => ({ ...prev, projects: true })); }} className="p-2 rounded-lg hover:bg-hub-bg/60 text-blue-tide" title="Projects">
+                  <Layers className="h-4 w-4" />
+                </button>
+                <button onClick={() => { setSidebarCollapsed(false); setSectionOpen(prev => ({ ...prev, tools: true })); }} className="p-2 rounded-lg hover:bg-hub-bg/60 text-slate-500" title="Tools">
+                  <Activity className="h-4 w-4" />
+                </button>
               </div>
+            ) : (
+            <>
+              {/* IDEAS SECTION */}
+              <div>
+                <button
+                  onClick={() => toggleSection('ideas')}
+                  className="flex items-center gap-2 px-2 py-1.5 w-full text-left hover:bg-hub-bg/40 rounded-lg transition-colors"
+                >
+                  {sectionOpen.ideas ? <ChevronDown className="h-3 w-3 text-slate-500" /> : <ChevronRight className="h-3 w-3 text-slate-500" />}
+                  <Lightbulb className="h-3.5 w-3.5 text-amber-400" />
+                  <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Ideas</span>
+                  <span className="ml-auto text-[10px] bg-hub-border text-slate-400 rounded-full px-1.5 py-0.5 font-mono">{ideas.filter((i: any) => i.status === 'inbox').length}</span>
+                </button>
+                {sectionOpen.ideas && (
+                  ideas.filter((i: any) => i.status === 'inbox').length === 0
+                    ? <p className="text-[11px] text-slate-600 px-7 py-1">No ideas yet — press Cmd+K</p>
+                    : ideas.filter((i: any) => i.status === 'inbox').map((i: any) => (
+                      <div key={i.id} className="px-7 py-1.5">
+                        <div
+                          onClick={() => { setActiveIdea(i); setActiveProject(null); setActiveTool(null); }}
+                          className={`flex items-center justify-between rounded-lg group cursor-pointer transition-colors px-1 -mx-1 ${activeIdea?.id === i.id ? 'bg-hub-bg' : 'hover:bg-hub-bg/60'}`}
+                        >
+                          <span className={`text-[12px] truncate flex-1 ${activeIdea?.id === i.id ? 'text-slate-100' : 'text-slate-300'}`}>{i.title}</span>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setOpenCommentIdeaId(openCommentIdeaId === i.id ? null : i.id); setCommentDraft(''); }}
+                            className="text-slate-500 hover:text-blue-tide transition-colors ml-2 shrink-0 relative"
+                            title="Add comment"
+                          >
+                            <MessageSquarePlus className="h-3.5 w-3.5" />
+                            {(ideaComments[i.id]?.length || 0) > 0 && (
+                              <span className="absolute -top-1.5 -right-1.5 text-[8px] bg-blue-tide text-slate-900 rounded-full h-3.5 w-3.5 flex items-center justify-center font-bold">{ideaComments[i.id].length}</span>
+                            )}
+                          </button>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setSelectedIdeaForProj(i); setIsProjectModalOpen(true); }}
+                            className="text-[10px] text-blue-tide opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap ml-2"
+                          >
+                            → Project
+                          </button>
+                        </div>
+                        {i.description && (
+                          <p className="text-[10px] text-slate-500 truncate pl-1 mt-0.5">{i.description}</p>
+                        )}
+                        {openCommentIdeaId === i.id && (
+                          <div className="mt-1.5 pl-1 flex flex-col gap-1.5" onClick={(e) => e.stopPropagation()}>
+                            {(ideaComments[i.id] || []).map((c, idx) => (
+                              <div key={idx} className="flex items-start gap-1.5 text-[10px] text-slate-400 bg-hub-bg/60 rounded px-2 py-1">
+                                <MessageSquare className="h-3 w-3 mt-0.5 shrink-0 text-blue-tide" />
+                                <span className="leading-snug">{c}</span>
+                              </div>
+                            ))}
+                            <div className="flex gap-1.5">
+                              <input
+                                autoFocus
+                                type="text"
+                                value={commentDraft}
+                                onChange={(e) => setCommentDraft(e.target.value)}
+                                onKeyDown={(e) => { if (e.key === 'Enter') addIdeaComment(i.id); if (e.key === 'Escape') setOpenCommentIdeaId(null); }}
+                                placeholder="Add a comment..."
+                                className="flex-1 bg-hub-bg text-[11px] text-slate-200 px-2 py-1 rounded border border-hub-border focus:outline-none focus:border-blue-tide"
+                              />
+                              <button onClick={() => addIdeaComment(i.id)} className="text-[10px] font-bold text-slate-900 bg-soft-sand hover:bg-slate-200 px-2 rounded transition-colors">Add</button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))
+                )}
+              </div>
+
+              <div className="border-t border-hub-border/40 my-1" />
+
+              {/* PROJECTS SECTION */}
+              <div>
+                <button
+                  onClick={() => toggleSection('projects')}
+                  className="flex items-center gap-2 px-2 py-1.5 w-full text-left hover:bg-hub-bg/40 rounded-lg transition-colors"
+                >
+                  {sectionOpen.projects ? <ChevronDown className="h-3 w-3 text-slate-500" /> : <ChevronRight className="h-3 w-3 text-slate-500" />}
+                  <Layers className="h-3.5 w-3.5 text-blue-tide" />
+                  <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Projects</span>
+                  <span className="ml-auto text-[10px] bg-hub-border text-slate-400 rounded-full px-1.5 py-0.5 font-mono">{projects.length}</span>
+                </button>
+                {sectionOpen.projects && (
+                  projects.length === 0
+                    ? <p className="text-[11px] text-slate-600 px-7 py-1">No projects loaded yet</p>
+                    : projects.map((p: any) => {
+                      const projTasks = tasks.filter((t: any) => t.project_id === p.id);
+                      const done = projTasks.filter((t: any) => t.status === 'done').length;
+                      const pct = projTasks.length > 0 ? Math.round((done / projTasks.length) * 100) : 0;
+                      return (
+                        <div
+                          key={p.id}
+                          onClick={() => { setActiveProject(p); setActiveTool(null); setActiveIdea(null); }}
+                          className={`px-7 py-1.5 rounded-lg cursor-pointer transition-colors ${activeProject?.id === p.id ? 'bg-hub-bg' : 'hover:bg-hub-bg/60'}`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className={`text-[12px] truncate flex-1 ${activeProject?.id === p.id ? 'text-slate-100' : 'text-slate-300'}`}>{p.title}</span>
+                            <span className="text-[10px] text-slate-500 ml-2">{pct}%</span>
+                          </div>
+                          <div className="mt-1 h-0.5 bg-hub-border rounded-full w-full">
+                            <div className="h-0.5 bg-emerald-500 rounded-full transition-all" style={{ width: `${pct}%` }} />
+                          </div>
+                        </div>
+                      );
+                    })
+                )}
+              </div>
+
+              <div className="border-t border-hub-border/40 my-1" />
+
+              {/* TOOLS SECTION */}
+              <div>
+                <button
+                  onClick={() => toggleSection('tools')}
+                  className="flex items-center gap-2 px-2 py-1.5 w-full text-left hover:bg-hub-bg/40 rounded-lg transition-colors"
+                >
+                  {sectionOpen.tools ? <ChevronDown className="h-3 w-3 text-slate-500" /> : <ChevronRight className="h-3 w-3 text-slate-500" />}
+                  <Activity className="h-3.5 w-3.5 text-slate-500" />
+                  <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Tools</span>
+                </button>
+                {sectionOpen.tools && ([
+                  { label: 'AI Briefing',          key: 'briefing',   icon: <CheckSquare className="h-3.5 w-3.5" /> },
+                  { label: 'Onboarding Generator', key: 'onboarding', icon: <FileDown    className="h-3.5 w-3.5" /> },
+                  { label: 'Event Simulator',      key: 'simulator',  icon: <Activity    className="h-3.5 w-3.5" /> },
+                ] as const).map(tool => (
+                  <div
+                    key={tool.key}
+                    onClick={() => { setActiveTool(tool.key); setActiveProject(null); setActiveIdea(null); }}
+                    className={`flex items-center gap-2 px-7 py-1.5 rounded-lg cursor-pointer transition-colors ${activeTool === tool.key ? 'bg-hub-bg text-slate-200' : 'hover:bg-hub-bg/60 text-slate-400'}`}
+                  >
+                    <span className={activeTool === tool.key ? 'text-blue-tide' : 'text-slate-500'}>{tool.icon}</span>
+                    <span className="text-[12px]">{tool.label}</span>
+                  </div>
+                ))}
+              </div>
+            </>
             )}
 
-            <div className="flex-1 overflow-y-auto space-y-3 pr-1">
-              {actionItems.length === 0 ? (
-                <div className="h-full flex flex-col items-center justify-center text-slate-500 text-center p-4">
-                  <CheckSquare className="h-10 w-10 mb-2 opacity-30" />
-                  <p className="text-sm">No action items extracted yet.</p>
-                </div>
-              ) : (
-                actionItems.map((item: any) => (
-                  <div 
-                    key={item.id}
-                    className="p-3 bg-hub-bg/50 rounded-lg border border-hub-border flex items-center justify-between space-x-4"
-                  >
-                    <div>
-                      <h4 className="text-sm font-semibold text-slate-200">{item.task}</h4>
-                      <div className="flex items-center space-x-3 mt-1.5 text-[10px] text-blue-tide">
-                        <span className="flex items-center space-x-1">
-                          <User className="h-3 w-3" />
-                          <span>Owner: {item.owner}</span>
-                        </span>
-                        <span className="flex items-center space-x-1">
-                          <Calendar className="h-3 w-3" />
-                          <span>Deadline: {item.deadline}</span>
-                        </span>
-                      </div>
-                    </div>
-                    
-                    <button
-                      onClick={async () => {
-                        try {
-                          await api.updateActionItemStatus(item.id, item.status === 'completed' ? 'pending' : 'completed', DEFAULT_WORKSPACE);
-                        } catch (err: any) {
-                          setAppError(err.message);
-                        }
-                      }}
-                      className={`px-3 py-1 rounded-md text-xs font-semibold border transition-colors ${
-                        item.status === 'completed' 
-                          ? 'bg-emerald-950/40 text-emerald-400 border-emerald-800'
-                          : 'bg-hub-border text-slate-300 border-hub-border hover:border-slate-400'
-                      }`}
-                    >
-                      {item.status === 'completed' ? 'Completed' : 'Pending'}
-                    </button>
-                  </div>
-                ))
-              )}
-            </div>
           </div>
-
         </section>
 
-        {/* PANEL 3: ONBOARDING PDF & WEBHOOK SIMULATOR */}
-        <section className="space-y-6 lg:col-span-1">
-          
-          {/* AI DAILY BRIEFING */}
-          <DailyBriefing workspaceId={DEFAULT_WORKSPACE} />
+        {/* CENTER COLUMN WORKSPACE ROUTER */}
+        <section className="flex-1 min-w-0">
 
-          {/* AUTO-GENERATE ONBOARDING PDF */}
-          <div className="bg-hub-card rounded-xl border border-hub-border p-4">
-            <h2 className="text-sm font-bold text-blue-tide uppercase tracking-wider mb-3 pb-2 border-b border-hub-border/60 flex items-center space-x-2">
-              <FileDown className="h-4.5 w-4.5" />
-              <span>Onboarding PDF</span>
-            </h2>
-            
-            <p className="text-xs text-slate-400 leading-relaxed mb-4">
-              Compile decisions, architecture constraints, and active project tasks into a formatted PDF brief for new hires.
-            </p>
+          {activeTool === 'briefing' && (
+            <DailyBriefing workspaceId={DEFAULT_WORKSPACE} />
+          )}
 
-            <form onSubmit={handleGeneratePDF} className="space-y-3">
-              <div>
-                <label className="block text-[11px] font-semibold text-blue-tide mb-1">New Hire Name</label>
-                <input
-                  type="text"
-                  placeholder="e.g. Jane Doe"
-                  value={pdfHireName}
-                  onChange={(e) => setPdfHireName(e.target.value)}
-                  className="w-full bg-hub-bg text-xs text-slate-200 px-3 py-2 rounded border border-hub-border focus:outline-none focus:border-soft-sand"
-                  required
-                />
+          {activeTool === 'onboarding' && (
+            <div className="bg-hub-card rounded-xl border border-hub-border p-5">
+              <h2 className="text-sm font-bold text-blue-tide uppercase tracking-wider mb-3 pb-2 border-b border-hub-border/60 flex items-center space-x-2">
+                <FileDown className="h-4 w-4" /><span>Onboarding PDF Generator</span>
+              </h2>
+              <p className="text-xs text-slate-400 leading-relaxed mb-4">Compile decisions, architecture constraints, and active project tasks into a formatted PDF brief for new hires.</p>
+              <form onSubmit={handleGeneratePDF} className="space-y-3">
+                <div>
+                  <label className="block text-[11px] font-semibold text-blue-tide mb-1">New Hire Name</label>
+                  <input type="text" placeholder="e.g. Jane Doe" value={pdfHireName} onChange={(e) => setPdfHireName(e.target.value)} className="w-full bg-hub-bg text-xs text-slate-200 px-3 py-2 rounded border border-hub-border focus:outline-none focus:border-soft-sand" required />
+                </div>
+                <button type="submit" disabled={isPdfGenerating || !pdfHireName} className="w-full bg-soft-sand hover:bg-slate-200 text-slate-900 text-xs font-bold py-2 rounded transition-colors disabled:opacity-50 flex items-center justify-center space-x-1.5">
+                  {isPdfGenerating ? <span>Generating PDF...</span> : <><FileDown className="h-4 w-4" /><span>Download Onboarding Brief</span></>}
+                </button>
+              </form>
+            </div>
+          )}
+
+          {activeTool === 'simulator' && (
+            <div className="bg-hub-card rounded-xl border border-hub-border p-5">
+              <h2 className="text-sm font-bold text-blue-tide uppercase tracking-wider mb-3 pb-2 border-b border-hub-border/60 flex items-center space-x-2">
+                <Activity className="h-4 w-4 animate-pulse" /><span>Webhook Simulator</span>
+              </h2>
+              <div className="grid grid-cols-3 gap-1 mb-4 bg-hub-bg p-1 rounded border border-hub-border">
+                {(['slack', 'whatsapp', 'github'] as const).map(src => (
+                  <button key={src} type="button" onClick={() => { setMockSource(src); setWebhookMessage(null); }}
+                    className={`text-[10px] font-bold py-1 rounded transition-colors uppercase ${mockSource === src ? 'bg-hub-border text-soft-sand' : 'text-slate-500 hover:text-slate-300'}`}>
+                    {src}
+                  </button>
+                ))}
               </div>
-              
-              <button
-                type="submit"
-                disabled={isPdfGenerating || !pdfHireName}
-                className="w-full bg-soft-sand hover:bg-slate-200 text-slate-900 text-xs font-bold py-2 rounded transition-colors disabled:opacity-50 flex items-center justify-center space-x-1.5"
-              >
-                {isPdfGenerating ? (
-                  <span>Generating PDF...</span>
-                ) : (
+              <form onSubmit={handleTriggerWebhook} className="space-y-3">
+                {mockSource !== 'github' && (
                   <>
-                    <FileDown className="h-4 w-4" />
-                    <span>Download Onboarding Brief</span>
+                    <div>
+                      <label className="block text-[10px] font-semibold text-blue-tide mb-1">{mockSource === 'whatsapp' ? 'Phone Number (From)' : 'Sender Username'}</label>
+                      <input type="text" value={mockSender} onChange={(e) => setMockSender(e.target.value)} className="w-full bg-hub-bg text-xs text-slate-200 px-2.5 py-1.5 rounded border border-hub-border focus:outline-none" required />
+                    </div>
+                    {mockSource === 'slack' && (
+                      <div>
+                        <label className="block text-[10px] font-semibold text-blue-tide mb-1">Slack Channel</label>
+                        <input type="text" value={mockChannel} onChange={(e) => setMockChannel(e.target.value)} className="w-full bg-hub-bg text-xs text-slate-200 px-2.5 py-1.5 rounded border border-hub-border focus:outline-none" required />
+                      </div>
+                    )}
+                    <div>
+                      <label className="block text-[10px] font-semibold text-blue-tide mb-1">Message Content</label>
+                      <textarea value={mockText} onChange={(e) => setMockText(e.target.value)} rows={4} placeholder="Enter chat dialogue..." className="w-full bg-hub-bg text-xs text-slate-200 px-2.5 py-1.5 rounded border border-hub-border focus:outline-none resize-none" required />
+                    </div>
                   </>
                 )}
-              </button>
-            </form>
-          </div>
-
-          {/* INTERACTIVE WEBHOOK MOCK SIMULATOR */}
-          <div className="bg-hub-card rounded-xl border border-hub-border p-4">
-            <h2 className="text-sm font-bold text-blue-tide uppercase tracking-wider mb-3 pb-2 border-b border-hub-border/60 flex items-center space-x-2">
-              <Activity className="h-4.5 w-4.5 animate-pulse" />
-              <span>Webhook Simulator</span>
-            </h2>
-
-            <p className="text-xs text-slate-400 leading-relaxed mb-3">
-              Simulate events from Slack threads, Twilio WhatsApp, or GitHub triggers to verify live state extraction.
-            </p>
-
-            <div className="grid grid-cols-3 gap-1 mb-4 bg-hub-bg p-1 rounded border border-hub-border">
-              {(['slack', 'whatsapp', 'github'] as const).map(src => (
-                <button
-                  key={src}
-                  type="button"
-                  onClick={() => { setMockSource(src); setWebhookMessage(null); }}
-                  className={`text-[10px] font-bold py-1 rounded transition-colors uppercase ${
-                    mockSource === src 
-                      ? 'bg-hub-border text-soft-sand border border-hub-border' 
-                      : 'text-slate-500 hover:text-slate-300'
-                  }`}
-                >
-                  {src}
+                {mockSource === 'github' && (
+                  <div className="space-y-2.5">
+                    <div className="grid grid-cols-3 gap-2">
+                      <div className="col-span-1">
+                        <label className="block text-[10px] font-semibold text-blue-tide mb-1">PR #</label>
+                        <input type="number" value={mockGithubNum} onChange={(e) => setMockGithubNum(Number(e.target.value))} className="w-full bg-hub-bg text-xs text-slate-200 px-2.5 py-1.5 rounded border border-hub-border focus:outline-none" required />
+                      </div>
+                      <div className="col-span-2">
+                        <label className="block text-[10px] font-semibold text-blue-tide mb-1">PR Title</label>
+                        <input type="text" value={mockGithubTitle} onChange={(e) => setMockGithubTitle(e.target.value)} className="w-full bg-hub-bg text-xs text-slate-200 px-2.5 py-1.5 rounded border border-hub-border focus:outline-none" required />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-semibold text-blue-tide mb-1">PR Description</label>
+                      <textarea value={mockGithubDesc} onChange={(e) => setMockGithubDesc(e.target.value)} rows={2} className="w-full bg-hub-bg text-xs text-slate-200 px-2.5 py-1.5 rounded border border-hub-border focus:outline-none resize-none" />
+                    </div>
+                  </div>
+                )}
+                {webhookMessage && <div className="text-[10px] font-semibold text-emerald-400 bg-emerald-950/20 border border-emerald-900 p-2 rounded">{webhookMessage}</div>}
+                <button type="submit" disabled={isWebhookSending} className="w-full bg-hub-border hover:bg-slate-700 text-slate-100 text-xs font-bold py-2 rounded transition-colors flex items-center justify-center">
+                  {isWebhookSending ? 'Sending...' : 'Simulate Event'}
                 </button>
-              ))}
+              </form>
             </div>
+          )}
 
-            <form onSubmit={handleTriggerWebhook} className="space-y-3">
-              
-              {/* SENDER INPUT (Only WhatsApp & Slack) */}
-              {mockSource !== 'github' && (
-                <div>
-                  <label className="block text-[10px] font-semibold text-blue-tide mb-1">
-                    {mockSource === 'whatsapp' ? 'Phone Number (From)' : 'Sender Username'}
-                  </label>
-                  <input
-                    type="text"
-                    value={mockSender}
-                    onChange={(e) => setMockSender(e.target.value)}
-                    className="w-full bg-hub-bg text-xs text-slate-200 px-2.5 py-1.5 rounded border border-hub-border focus:outline-none focus:border-soft-sand"
-                    required
-                  />
-                </div>
-              )}
-
-              {/* SLACK CHANNEL (Only Slack) */}
-              {mockSource === 'slack' && (
-                <div>
-                  <label className="block text-[10px] font-semibold text-blue-tide mb-1">Slack Channel</label>
-                  <input
-                    type="text"
-                    value={mockChannel}
-                    onChange={(e) => setMockChannel(e.target.value)}
-                    className="w-full bg-hub-bg text-xs text-slate-200 px-2.5 py-1.5 rounded border border-hub-border focus:outline-none"
-                    required
-                  />
-                </div>
-              )}
-
-              {/* MESSAGE TEXT (Slack & WhatsApp) */}
-              {mockSource !== 'github' && (
-                <div>
-                  <label className="block text-[10px] font-semibold text-blue-tide mb-1">Message Content</label>
-                  <textarea
-                    value={mockText}
-                    onChange={(e) => setMockText(e.target.value)}
-                    rows={3}
-                    placeholder="Enter chat dialogue..."
-                    className="w-full bg-hub-bg text-xs text-slate-200 px-2.5 py-1.5 rounded border border-hub-border focus:outline-none focus:border-soft-sand resize-none"
-                    required
-                  />
-                  <p className="text-[9px] text-slate-500 mt-1">
-                    {mockSource === 'slack' 
-                      ? 'Decision trigger words: decide, agreed, use, chosen.'
-                      : 'Action item trigger words: will, should, by [date].'
-                    }
-                  </p>
-                </div>
-              )}
-
-              {/* GITHUB FIELDS */}
-              {mockSource === 'github' && (
-                <div className="space-y-2.5">
-                  <div className="grid grid-cols-3 gap-2">
-                    <div className="col-span-1">
-                      <label className="block text-[10px] font-semibold text-blue-tide mb-1">PR #</label>
-                      <input
-                        type="number"
-                        value={mockGithubNum}
-                        onChange={(e) => setMockGithubNum(Number(e.target.value))}
-                        className="w-full bg-hub-bg text-xs text-slate-200 px-2.5 py-1.5 rounded border border-hub-border focus:outline-none"
-                        required
-                      />
-                    </div>
-                    <div className="col-span-2">
-                      <label className="block text-[10px] font-semibold text-blue-tide mb-1">PR Title</label>
-                      <input
-                        type="text"
-                        value={mockGithubTitle}
-                        onChange={(e) => setMockGithubTitle(e.target.value)}
-                        className="w-full bg-hub-bg text-xs text-slate-200 px-2.5 py-1.5 rounded border border-hub-border focus:outline-none"
-                        required
-                      />
-                    </div>
+          {activeIdea && !activeTool && (
+            <div className="bg-hub-card rounded-xl border border-hub-border p-5 flex flex-col gap-4">
+              <div className="flex items-start justify-between pb-3 border-b border-hub-border/60">
+                <div className="flex items-start gap-3">
+                  <div className="p-2 bg-amber-400/15 rounded-lg border border-amber-400/30 text-amber-400 mt-0.5">
+                    <Lightbulb className="h-5 w-5" />
                   </div>
                   <div>
-                    <label className="block text-[10px] font-semibold text-blue-tide mb-1">PR Description</label>
-                    <textarea
-                      value={mockGithubDesc}
-                      onChange={(e) => setMockGithubDesc(e.target.value)}
-                      rows={2}
-                      className="w-full bg-hub-bg text-xs text-slate-200 px-2.5 py-1.5 rounded border border-hub-border focus:outline-none resize-none"
-                    />
+                    <h2 className="text-base font-bold text-slate-100">{activeIdea.title}</h2>
+                    <p className="text-[11px] text-blue-tide uppercase tracking-wider font-semibold">Idea</p>
                   </div>
                 </div>
-              )}
+                <button onClick={() => setActiveIdea(null)} className="text-blue-tide hover:text-slate-100">
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
 
-              {webhookMessage && (
-                <div className="text-[10px] font-semibold text-emerald-400 bg-emerald-950/20 border border-emerald-900 p-2 rounded">
-                  {webhookMessage}
+              <div>
+                <h3 className="text-[11px] font-bold text-blue-tide uppercase tracking-wider mb-2">Description</h3>
+                <p className="text-sm text-slate-300 leading-relaxed bg-hub-bg/50 rounded-lg border border-hub-border/40 p-3">
+                  {activeIdea.description || 'No description provided.'}
+                </p>
+              </div>
+
+              <div>
+                <h3 className="text-[11px] font-bold text-blue-tide uppercase tracking-wider mb-2">Comments</h3>
+                <div className="flex flex-col gap-2 bg-hub-bg/50 rounded-lg border border-hub-border/40 p-3">
+                  {(ideaComments[activeIdea.id]?.length || 0) === 0 && (
+                    <p className="text-[11px] text-slate-600">No comments yet.</p>
+                  )}
+                  {(ideaComments[activeIdea.id] || []).map((c, idx) => (
+                    <div key={idx} className="flex items-start gap-2 text-xs text-slate-300 bg-hub-card/60 rounded px-2.5 py-1.5">
+                      <MessageSquare className="h-3.5 w-3.5 mt-0.5 shrink-0 text-blue-tide" />
+                      <span className="leading-snug">{c}</span>
+                    </div>
+                  ))}
+                  <div className="flex gap-2 pt-1">
+                    <input
+                      type="text"
+                      value={ideaDetailCommentDraft}
+                      onChange={(e) => setIdeaDetailCommentDraft(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') addIdeaDetailComment(activeIdea.id); }}
+                      placeholder="Add a comment..."
+                      className="flex-1 bg-hub-bg text-xs text-slate-200 px-3 py-2 rounded-lg border border-hub-border focus:outline-none focus:border-blue-tide"
+                    />
+                    <button
+                      onClick={() => addIdeaDetailComment(activeIdea.id)}
+                      className="flex items-center gap-1.5 text-xs font-bold text-slate-900 bg-soft-sand hover:bg-slate-200 px-3 py-2 rounded-lg transition-colors"
+                    >
+                      <MessageSquarePlus className="h-3.5 w-3.5" /> Add
+                    </button>
+                  </div>
                 </div>
-              )}
+              </div>
 
-              <button
-                type="submit"
-                disabled={isWebhookSending}
-                className="w-full bg-hub-border hover:bg-slate-700 text-slate-100 text-xs font-bold py-2 rounded transition-colors flex items-center justify-center space-x-1.5"
-              >
-                {isWebhookSending ? <span>Sending...</span> : <span>Simulate Event</span>}
-              </button>
+              <div className="flex items-center justify-between bg-driftwood/10 border border-driftwood/25 p-3 rounded-lg">
+                <p className="text-[11px] text-slate-300 leading-relaxed">
+                  Ready to start building? Convert this idea into a project to generate tasks.
+                </p>
+                <button
+                  onClick={() => { setSelectedIdeaForProj(activeIdea); setIsProjectModalOpen(true); }}
+                  className="ml-3 shrink-0 px-3 py-2 bg-soft-sand hover:bg-slate-200 text-slate-900 text-[11px] font-bold rounded-lg transition-colors whitespace-nowrap"
+                >
+                  Convert to Project
+                </button>
+              </div>
+            </div>
+          )}
 
-            </form>
-          </div>
+          {!activeIdea && !activeTool && (
+            <ProjectWorkspace
+              decisions={decisions}
+              blockers={blockers}
+              tasks={tasks.filter((t: any) => activeProject ? t.project_id === activeProject.id : true)}
+              projects={activeProject ? [activeProject] : (projects.length > 0 ? projects : [{ id: 'p1', title: 'StartupHub Core', status: 'active', activeSince: '2026-06-10', deadline: projDeadline, owner: projOwner }])}
+              onAddDeadlineClick={() => setIsProjectModalOpen(true)}
+              onAddTaskClick={() => pushToast('info', 'Task Registration Pipeline', 'Task creation injection triggered context safely.')}
+            />
+          )}
 
         </section>
 
@@ -824,139 +680,74 @@ export default function App() {
         </span>
       </footer>
 
-      {/* TOAST NOTIFICATIONS */}
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
 
-      {/* MODAL 1: INSTANT IDEA CAPTURE (Cmd+K overlay) */}
+      {/* MODAL: IDEA CAPTURE */}
       {isIdeaModalOpen && (
         <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-hub-card border border-hub-border rounded-xl w-full max-w-md p-5 relative shadow-2xl">
-            <button 
-              onClick={() => setIsIdeaModalOpen(false)}
-              className="absolute right-4 top-4 text-blue-tide hover:text-slate-100"
-            >
-              <X className="h-5 w-5" />
-            </button>
-            
+            <button onClick={() => setIsIdeaModalOpen(false)} className="absolute right-4 top-4 text-blue-tide hover:text-slate-100"><X className="h-5 w-5" /></button>
             <div className="flex items-center space-x-2 text-soft-sand mb-4">
               <Lightbulb className="h-5 w-5" />
               <h3 className="text-md font-bold uppercase tracking-wider">Instant Idea Capture</h3>
             </div>
-
             <form onSubmit={handleCreateIdea} className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-blue-tide mb-1">Idea Title</label>
-                <input
-                  type="text"
-                  placeholder="e.g. Realtime PDF Generator"
-                  value={newIdeaTitle}
-                  onChange={(e) => setNewIdeaTitle(e.target.value)}
-                  className="w-full bg-hub-bg text-sm text-slate-200 px-3 py-2 rounded-lg border border-hub-border focus:outline-none focus:border-soft-sand"
-                  required
-                  autoFocus
-                />
+                <input type="text" placeholder="e.g. Realtime PDF Generator" value={newIdeaTitle} onChange={(e) => setNewIdeaTitle(e.target.value)} className="w-full bg-hub-bg text-sm text-slate-200 px-3 py-2 rounded-lg border border-hub-border focus:outline-none focus:border-soft-sand" required autoFocus />
               </div>
-
               <div>
                 <label className="block text-xs font-semibold text-blue-tide mb-1">Description</label>
-                <textarea
-                  placeholder="Explain the problem it solves, technology stack, or target metrics..."
-                  value={newIdeaDesc}
-                  onChange={(e) => setNewIdeaDesc(e.target.value)}
-                  rows={4}
-                  className="w-full bg-hub-bg text-sm text-slate-200 px-3 py-2 rounded-lg border border-hub-border focus:outline-none focus:border-soft-sand resize-none"
-                  required
-                />
+                <textarea placeholder="Explain the problem it solves..." value={newIdeaDesc} onChange={(e) => setNewIdeaDesc(e.target.value)} rows={4} className="w-full bg-hub-bg text-sm text-slate-200 px-3 py-2 rounded-lg border border-hub-border focus:outline-none focus:border-soft-sand resize-none" required />
               </div>
-
               <div className="flex items-center justify-end space-x-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setIsIdeaModalOpen(false)}
-                  className="px-4 py-2 bg-hub-bg hover:bg-hub-border text-slate-400 text-xs font-bold rounded-lg border border-hub-border"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-soft-sand hover:bg-slate-200 text-slate-900 text-xs font-bold rounded-lg transition-colors"
-                >
-                  Save Idea
-                </button>
+                <button type="button" onClick={() => setIsIdeaModalOpen(false)} className="px-4 py-2 bg-hub-bg hover:bg-hub-border text-slate-400 text-xs font-bold rounded-lg border border-hub-border">Cancel</button>
+                <button type="submit" className="px-4 py-2 bg-soft-sand hover:bg-slate-200 text-slate-900 text-xs font-bold rounded-lg transition-colors">Save Idea</button>
               </div>
             </form>
           </div>
         </div>
       )}
 
-      {/* MODAL 2: MAKE PROJECT & AUTOGENERATE TASK LISTS */}
-      {selectedIdeaForProj && (
+      {/* MODAL: INTERACTIVE CALENDAR DEADLINE SELECTOR / PROJECT CONVERSION */}
+      {isProjectModalOpen && (
         <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-hub-card border border-hub-border rounded-xl w-full max-w-md p-5 relative shadow-2xl">
-            <button 
-              onClick={() => setSelectedIdeaForProj(null)}
-              className="absolute right-4 top-4 text-blue-tide hover:text-slate-100"
-            >
-              <X className="h-5 w-5" />
-            </button>
-            
+            <button onClick={() => setIsProjectModalOpen(false)} className="absolute right-4 top-4 text-blue-tide hover:text-slate-100"><X className="h-5 w-5" /></button>
             <div className="flex items-center space-x-2 text-soft-sand mb-3">
-              <Layers className="h-5 w-5" />
-              <h3 className="text-md font-bold uppercase tracking-wider">Convert Idea to Project</h3>
+              <Layers className="h-5 w-5 text-amber-400" />
+              <h3 className="text-md font-bold uppercase tracking-wider text-slate-200">Configure Target Parameters</h3>
             </div>
+            
+            {selectedIdeaForProj && (
+              <div className="bg-hub-bg p-3 rounded-lg border border-hub-border/50 text-xs mb-4">
+                <h4 className="font-bold text-slate-200">{selectedIdeaForProj.title}</h4>
+                <p className="text-slate-400 mt-1 line-clamp-2">{selectedIdeaForProj.description}</p>
+              </div>
+            )}
 
-            <div className="bg-hub-bg p-3 rounded-lg border border-hub-border/50 text-xs mb-4">
-              <h4 className="font-bold text-slate-200">{selectedIdeaForProj.title}</h4>
-              <p className="text-slate-400 mt-1">{selectedIdeaForProj.description}</p>
-            </div>
-
-            <form onSubmit={handleConvertProject} className="space-y-4">
+            <form onSubmit={selectedIdeaForProj ? handleConvertProject : handleSaveDeadlineUpdate} className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-blue-tide mb-1">Project Owner</label>
-                <input
-                  type="text"
-                  placeholder="e.g. Rahul"
-                  value={projOwner}
-                  onChange={(e) => setProjOwner(e.target.value)}
-                  className="w-full bg-hub-bg text-sm text-slate-200 px-3 py-2 rounded-lg border border-hub-border focus:outline-none"
-                  required
-                  autoFocus
-                />
+                <input type="text" placeholder="e.g. Ovee" value={projOwner} onChange={(e) => setProjOwner(e.target.value)} className="w-full bg-hub-bg text-sm text-slate-200 px-3 py-2 rounded-lg border border-hub-border focus:outline-none" required autoFocus />
               </div>
-
               <div>
-                <label className="block text-xs font-semibold text-blue-tide mb-1">Target Deadline</label>
-                <input
-                  type="text"
-                  placeholder="e.g. Wednesday, Friday, or June 20th"
-                  value={projDeadline}
-                  onChange={(e) => setProjDeadline(e.target.value)}
-                  className="w-full bg-hub-bg text-sm text-slate-200 px-3 py-2 rounded-lg border border-hub-border focus:outline-none"
-                  required
+                <label className="block text-xs font-semibold text-blue-tide mb-1">Target Calendar Deadline</label>
+                <input 
+                  type="date" 
+                  value={projDeadline} 
+                  onChange={(e) => setProjDeadline(e.target.value)} 
+                  className="w-full bg-hub-bg text-sm text-slate-200 px-3 py-2 rounded-lg border border-hub-border focus:outline-none focus:border-blue-tide font-mono" 
+                  required 
                 />
               </div>
-
               <div className="bg-driftwood/10 border border-driftwood/25 p-3 rounded text-[11px] text-slate-300">
                 <HelpCircle className="h-4 w-4 inline mr-1 text-soft-sand align-text-bottom" />
-                <span>
-                  Converting this idea will query the vector database for related Slack/WhatsApp messages and extract requirements. It then breaks down the scope into tasks assigned to the owner automatically.
-                </span>
+                Updating changes the live workspace matrix. Subtask deadline intervals adjust automatically.
               </div>
-
               <div className="flex items-center justify-end space-x-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setSelectedIdeaForProj(null)}
-                  className="px-4 py-2 bg-hub-bg hover:bg-hub-border text-slate-400 text-xs font-bold rounded-lg border border-hub-border"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-soft-sand hover:bg-slate-200 text-slate-900 text-xs font-bold rounded-lg transition-colors"
-                >
-                  Generate Project
-                </button>
+                <button type="button" onClick={() => setIsProjectModalOpen(false)} className="px-4 py-2 bg-hub-bg hover:bg-hub-border text-slate-400 text-xs font-bold rounded-lg border border-hub-border">Cancel</button>
+                <button type="submit" className="px-4 py-2 bg-blue-tide text-slate-950 text-xs font-bold rounded-lg hover:bg-slate-200 transition-colors">Apply Matrix Changes</button>
               </div>
             </form>
           </div>

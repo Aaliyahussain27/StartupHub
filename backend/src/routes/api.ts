@@ -677,7 +677,7 @@ Workspace Snapshot:
           max_tokens: 400,
           messages: [{
             role: 'user',
-            content: `You are a startup workspace assistant. Write a concise daily briefing for the team based on this workspace snapshot. Be direct, specific, and action-oriented. 2-3 sentences max.\n\n${context}`
+            content: `You are a startup workspace assistant. Write a concise daily briefing for the team based on this workspace snapshot. Format the response as 3-5 bullet points. Each bullet should be one short, action-oriented sentence. Start each bullet with •.\n\n${context}`
           }]
         });
         summary = response.content[0]?.type === 'text' ? response.content[0].text : '';
@@ -693,8 +693,8 @@ Workspace Snapshot:
       if (blockerReport.blockedTasks.length > 0) parts.push(`${blockerReport.blockedTasks.length} blocker${blockerReport.blockedTasks.length > 1 ? 's' : ''} need attention`);
       if (inboxIdeas.length > 0) parts.push(`${inboxIdeas.length} idea${inboxIdeas.length > 1 ? 's' : ''} waiting in inbox`);
       summary = parts.length > 0
-        ? `Here's what's happening: ${parts.join(', ')}.`
-        : 'Your workspace is up to date. No outstanding items.';
+      ? parts.map(p => `• ${p}`).join('\n')
+      : '• Your workspace is up to date. No outstanding items.';
     }
 
     const highlights: Array<{ icon: string; text: string }> = [];

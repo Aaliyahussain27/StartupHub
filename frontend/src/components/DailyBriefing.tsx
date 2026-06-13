@@ -114,10 +114,12 @@ export function DailyBriefing({ workspaceId }: DailyBriefingProps) {
 
           {/* Summary with typewriter */}
           <div className="text-sm text-slate-300 leading-relaxed bg-hub-bg/50 rounded-lg border border-hub-border/40 p-3 min-h-[60px]">
-            {typed}
-            {!typewriterDone && (
-              <span className="inline-block w-0.5 h-4 bg-soft-sand ml-0.5 animate-pulse align-middle" />
-            )}
+          {typed.split('\n').filter(Boolean).map((line, i) => (
+          <p key={i} className="mb-1">{line}</p>
+          ))}
+          {!typewriterDone && (
+           <span className="inline-block w-0.5 h-4 bg-soft-sand ml-0.5 animate-pulse align-middle" />
+           )}
           </div>
 
           {/* Highlights */}
