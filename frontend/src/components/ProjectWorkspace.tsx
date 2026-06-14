@@ -135,7 +135,9 @@ export function ProjectWorkspace({
   onAddDeadlineClick,
   onAddTaskClick 
 }: ProjectWorkspaceProps) {
-  const [modal, setModal] = useState<string | null>(null);
+    const [modal, setModal] = useState<string | null>(null);
+    const [localDeadline, setLocalDeadline] = useState<string>('');
+    const [deadlineEditing, setDeadlineEditing] = useState(false);
   
   // Workspace UI collapse & comment state management dictionaries
   const [expandedItems, setExpandedItems] = useState<Record<string, boolean>>({});
@@ -176,6 +178,8 @@ export function ProjectWorkspace({
   };
 
   const projectInstance = projects[0] || { title: 'StartupHub Core', status: 'active', activeSince: '2026-06-10', deadline: '' };
+  // Sync deadline from project data on first load
+  useState(() => { if (projectInstance.deadline && !localDeadline) setLocalDeadline(projectInstance.deadline); });
   const deadlineMetrics = getDaysRemaining(projectInstance.deadline);
 
   return (
@@ -208,9 +212,9 @@ export function ProjectWorkspace({
           {/* Status Metric Box */}
           <div className="bg-hub-card border border-hub-border rounded-xl p-3">
             <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Status</p>
-            <p className="text-sm font-medium text-emerald-400 uppercase">status {projectInstance.status || 'active'}</p>
+            <p className="text-sm font-medium text-emerald-400 capitalize">{projectInstance.status || 'Active'}</p>
             <p className="text-[11px] text-slate-400 mt-1">
-              active for {getDaysActive(projectInstance.activeSince)} days
+              since {getDaysActive(projectInstance.activeSince)} day{getDaysActive(projectInstance.activeSince) !== 1 ? 's' : ''}
             </p>
           </div>
 
@@ -225,14 +229,48 @@ export function ProjectWorkspace({
             </div>
           </div>
 
-          {/* Deadline Metric Box Interfacer */}
-          <div onClick={onAddDeadlineClick} className="bg-hub-card border border-hub-border rounded-xl p-3 cursor-pointer hover:border-amber-500/30 transition-colors">
-            <div className="flex items-center justify-between">
-              <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Deadline Box</p>
-              <span className="text-[9px] text-blue-tide underline">Config Date</span>
+          {/* Deadline Card */}
+          <div className="bg-hub-card border border-hub-border rounded-xl p-3">
+            <div className="flex items-center justify-between mb-1">
+              <p className="text-[10px] text-slate-500 uppercase tracking-wide">Deadline</p>
+              <button
+                onClick={() => setDeadlineEditing(true)}
+                className="text-[9px] text-blue-tide hover:text-blue-300 underline"
+              >
+                {localDeadline ? 'Edit' : 'Set date'}
+              </button>
             </div>
-            <p className="text-sm font-medium text-amber-400">{deadlineMetrics.text}</p>
-            <p className="text-[11px] text-slate-400 truncate mt-1">{deadlineMetrics.subtitle}</p>
+            {deadlineEditing ? (
+              <input
+                type="date"
+                autoFocus
+                defaultValue={localDeadline}
+                onBlur={(e) => { setLocalDeadline(e.target.value); setDeadlineEditing(false); }}
+                onChange={(e) => setLocalDeadline(e.target.value)}
+                className="w-full bg-hub-bg text-xs text-slate-200 px-2 py-1 rounded border border-hub-border focus:outline-none focus:border-amber-500/50 mt-1"
+              />
+            ) : localDeadline ? (
+              <>
+                <p className="text-sm font-medium text-amber-400">
+                  {new Date(localDeadline).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                  <span className="text-[10px] text-slate-500 ml-1">
+                    {new Date(localDeadline).toLocaleDateString('en-US', { weekday: 'short' })}
+                  </span>
+                </p>
+                <p className="text-[11px] mt-0.5">
+                  {(() => {
+                    const today = new Date(); today.setHours(0,0,0,0);
+                    const dl = new Date(localDeadline); dl.setHours(0,0,0,0);
+                    const diff = Math.ceil((dl.getTime() - today.getTime()) / (1000*60*60*24));
+                    if (diff < 0) return <span className="text-rose-400">{Math.abs(diff)} days overdue</span>;
+                    if (diff === 0) return <span className="text-amber-400">Due today</span>;
+                    return <span className="text-slate-400">{diff} days left</span>;
+                  })()}
+                </p>
+              </>
+            ) : (
+              <p className="text-xs text-slate-600 mt-1">No deadline set</p>
+            )}
           </div>
 
           {/* Owner Box */}
