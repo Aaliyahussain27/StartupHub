@@ -554,6 +554,117 @@ export const db = {
     return fullIdea;
   },
 
+  getIdeaById: async (id: string): Promise<Idea | null> => {
+    if (isFallbackMode || !pgPool) {
+      return fallbackData.ideas.find(i => i.id === id) ?? null;
+    }
+    const res = await pgPool.query('SELECT * FROM ideas WHERE id = $1', [id]);
+    return res.rows[0] ?? null;
+  },
+
+  findSimilarIdeas: async (
+    workspaceId: string,
+    embedding: number[],
+    options: {
+      excludeId?: string;
+      minScore?: number;
+      limit?: number;
+      status?: Idea['status'] | Idea['status'][];
+    } = {}
+  ): Promise<Array<{ idea: Idea; score: number }>> => {
+    const { excludeId, minScore = 0.35, limit = 5, status } = options;
+    const statusFilter = status
+      ? (Array.isArray(status) ? status : [status])
+      : null;
+
+    const scoreIdea = (idea: Idea) => ({
+      idea,
+      score: cosineSimilarity(embedding, idea.embedding)
+    });
+
+    if (isFallbackMode || !pgPool) {
+      return fallbackData.ideas
+        .filter(i => i.workspace_id === workspaceId && i.embedding)
+        .filter(i => i.id !== excludeId)
+        .filter(i => !statusFilter || statusFilter.includes(i.status))
+        .map(scoreIdea)
+        .filter(r => r.score >= minScore)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, limit);
+    }
+
+    const statusClause = statusFilter
+      ? `AND status IN (${statusFilter.map((_, i) => `$${i + 4}`).join(', ')})`
+      : '';
+    const params: any[] = [`[${embedding.join(',')}]`, workspaceId, excludeId ?? null];
+    if (statusFilter) params.push(...statusFilter);
+
+    const res = await pgPool.query(
+      `SELECT *, 1 - (embedding <=> $1::vector) AS score
+       FROM ideas
+       WHERE workspace_id = $2
+         AND ($3::uuid IS NULL OR id != $3)
+         ${statusClause}
+       ORDER BY score DESC
+       LIMIT ${limit}`,
+      params
+    );
+
+    return res.rows
+      .map((row: any) => ({
+        idea: row as Idea,
+        score: Number(row.score)
+      }))
+      .filter(r => r.score >= minScore);
+  },
+
+  updateIdea: async (
+    id: string,
+    fields: Partial<Pick<Idea, 'title' | 'description' | 'embedding' | 'status'>>
+  ): Promise<Idea | null> => {
+    if (isFallbackMode || !pgPool) {
+      const idx = fallbackData.ideas.findIndex(i => i.id === id);
+      if (idx === -1) return null;
+      fallbackData.ideas[idx] = { ...fallbackData.ideas[idx], ...fields };
+      saveFallbackData();
+      return fallbackData.ideas[idx];
+    }
+
+    const keys = Object.keys(fields);
+    if (keys.length === 0) return db.getIdeaById(id);
+
+    const setQuery = keys.map((k, index) => `${k} = $${index + 1}`).join(', ');
+    const params = keys.map(k => {
+      const val = (fields as any)[k];
+      return k === 'embedding' ? `[${(val as number[]).join(',')}]` : val;
+    });
+    params.push(id);
+
+    await pgPool.query(`UPDATE ideas SET ${setQuery} WHERE id = $${params.length}`, params);
+    return db.getIdeaById(id);
+  },
+
+  mergeIdeas: async (keepId: string, mergeId: string): Promise<Idea | null> => {
+    if (keepId === mergeId) return null;
+
+    const keep = await db.getIdeaById(keepId);
+    const merge = await db.getIdeaById(mergeId);
+    if (!keep || !merge) return null;
+    if (merge.status === 'archived') return null;
+
+    const mergeDate = new Date(merge.created_at).toLocaleDateString();
+    const combinedDescription = [
+      keep.description,
+      `\n\n--- Merged from "${merge.title}" (${mergeDate}) ---\n`,
+      merge.description
+    ].join('').trim();
+
+    await db.updateIdea(keepId, { description: combinedDescription });
+    await db.updateIdeaStatus(mergeId, 'archived');
+
+    return db.getIdeaById(keepId);
+  },
+
   updateIdeaStatus: async (id: string, status: 'inbox' | 'project' | 'archived'): Promise<boolean> => {
     if (isFallbackMode || !pgPool) {
       const idx = fallbackData.ideas.findIndex(i => i.id === id);

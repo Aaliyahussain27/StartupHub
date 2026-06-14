@@ -84,10 +84,114 @@ router.post('/ideas', async (req: Request, res: Response, next: NextFunction) =>
       embedding
     });
 
+    const similar = await db.findSimilarIdeas(workspaceId, embedding, {
+      excludeId: idea.id,
+      minScore: 0.35,
+      limit: 5,
+      status: ['inbox', 'project']
+    });
+
+    if (similar.length > 0) {
+      log('INFO', `Found ${similar.length} similar idea(s) for "${title}"`);
+    }
+
     // Notify dashboard
     await broadcastDashboardUpdate(workspaceId);
 
-    res.status(201).json(idea);
+    res.status(201).json({
+      idea,
+      similar: similar.map(s => ({
+        id: s.idea.id,
+        title: s.idea.title,
+        description: s.idea.description,
+        status: s.idea.status,
+        score: s.score,
+        created_at: s.idea.created_at
+      }))
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// 3b. GET /api/ideas/:id/similar
+router.get('/ideas/:id/similar', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params;
+    const workspaceId = (req.query.workspaceId as string) || DEFAULT_WORKSPACE_ID;
+
+    const idea = await db.getIdeaById(id);
+    if (!idea || idea.workspace_id !== workspaceId) {
+      res.status(404).json({ error: 'Idea not found.' });
+      return;
+    }
+
+    const similar = await db.findSimilarIdeas(workspaceId, idea.embedding, {
+      excludeId: id,
+      minScore: 0.35,
+      limit: 5,
+      status: ['inbox', 'project']
+    });
+
+    res.json({
+      ideaId: id,
+      similar: similar.map(s => ({
+        id: s.idea.id,
+        title: s.idea.title,
+        description: s.idea.description,
+        status: s.idea.status,
+        score: s.score,
+        created_at: s.idea.created_at
+      }))
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// 3c. POST /api/ideas/:id/merge — keep :id, archive and fold in mergeId
+router.post('/ideas/:id/merge', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { id: keepId } = req.params;
+    const { mergeId } = req.body;
+    const workspaceId = req.body.workspaceId || DEFAULT_WORKSPACE_ID;
+
+    if (!mergeId) {
+      res.status(400).json({ error: 'mergeId is required.' });
+      return;
+    }
+
+    const keep = await db.getIdeaById(keepId);
+    const merge = await db.getIdeaById(mergeId);
+
+    if (!keep || !merge) {
+      res.status(404).json({ error: 'One or both ideas not found.' });
+      return;
+    }
+    if (keep.workspace_id !== workspaceId || merge.workspace_id !== workspaceId) {
+      res.status(403).json({ error: 'Ideas must belong to the same workspace.' });
+      return;
+    }
+
+    log('INFO', `Merging idea "${merge.title}" (${mergeId}) into "${keep.title}" (${keepId})`);
+
+    const merged = await db.mergeIdeas(keepId, mergeId);
+    if (!merged) {
+      res.status(400).json({ error: 'Merge failed.' });
+      return;
+    }
+
+    const textToEmbed = `${merged.title}: ${merged.description}`;
+    const embedding = await generateEmbedding(textToEmbed);
+    const updated = await db.updateIdea(keepId, { embedding });
+
+    await broadcastDashboardUpdate(workspaceId);
+
+    res.json({
+      success: true,
+      idea: updated,
+      mergedFrom: { id: mergeId, title: merge.title }
+    });
   } catch (err) {
     next(err);
   }

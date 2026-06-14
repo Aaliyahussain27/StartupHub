@@ -16,10 +16,12 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   MessageSquarePlus,
-  MessageSquare
+  MessageSquare,
+  GitMerge,
+  Link2
 } from 'lucide-react';
 import { useWebSocket } from './hooks/useWebSocket';
-import { api, type SearchResult } from './services/api';
+import { api, type SearchResult, type SimilarIdea } from './services/api';
 import { ToastContainer, type Toast, type ToastType } from './components/Toast';
 import { DailyBriefing } from './components/DailyBriefing';
 import { ProjectWorkspace } from './components/ProjectWorkspace';
@@ -62,6 +64,12 @@ export default function App() {
   const [activeTool, setActiveTool] = useState<'briefing' | 'onboarding' | 'simulator' | null>(null);
   const [activeProject, setActiveProject] = useState<any | null>(null);
   const [activeIdea, setActiveIdea] = useState<any | null>(null);
+  const [similarIdeas, setSimilarIdeas] = useState<SimilarIdea[]>([]);
+  const [loadingSimilar, setLoadingSimilar] = useState(false);
+  const [mergingId, setMergingId] = useState<string | null>(null);
+
+  const [duplicateCandidates, setDuplicateCandidates] = useState<SimilarIdea[]>([]);
+  const [isDuplicateModalOpen, setIsDuplicateModalOpen] = useState(false);
 
   // Sidebar section collapse/expand state
   const [sectionOpen, setSectionOpen] = useState({ ideas: true, projects: true, tools: true });
@@ -148,16 +156,57 @@ export default function App() {
     setMockGithubDesc('');
   }, [mockSource]);
 
+  useEffect(() => {
+    if (!activeIdea?.id) {
+      setSimilarIdeas([]);
+      return;
+    }
+    setLoadingSimilar(true);
+    api.getSimilarIdeas(activeIdea.id, DEFAULT_WORKSPACE)
+      .then(setSimilarIdeas)
+      .catch(() => setSimilarIdeas([]))
+      .finally(() => setLoadingSimilar(false));
+  }, [activeIdea?.id]);
+
   const handleCreateIdea = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newIdeaTitle || !newIdeaDesc) return;
     try {
-      await api.createIdea(newIdeaTitle, newIdeaDesc, DEFAULT_WORKSPACE);
+      const { idea, similar } = await api.createIdea(newIdeaTitle, newIdeaDesc, DEFAULT_WORKSPACE);
       setNewIdeaTitle('');
       setNewIdeaDesc('');
       setIsIdeaModalOpen(false);
+
+      const likelyDuplicates = similar.filter(s => s.score >= 0.45);
+      if (likelyDuplicates.length > 0) {
+        setDuplicateCandidates(likelyDuplicates);
+        setActiveIdea(idea);
+        setIsDuplicateModalOpen(true);
+        pushToast('warning', 'Possible Duplicate', `"${idea.title}" looks similar to ${likelyDuplicates.length} existing idea(s).`);
+      } else if (similar.length > 0) {
+        pushToast('info', 'Related Ideas Found', `${similar.length} similar idea(s) linked in the idea view.`);
+        setActiveIdea(idea);
+      }
     } catch (err: any) {
       setAppError(err.message || 'Failed to create idea');
+    }
+  };
+
+  const handleMergeIdeas = async (keepId: string, mergeId: string, keepTitle?: string) => {
+    setMergingId(mergeId);
+    try {
+      const result = await api.mergeIdeas(keepId, mergeId, DEFAULT_WORKSPACE);
+      setSimilarIdeas(prev => prev.filter(s => s.id !== mergeId));
+      setDuplicateCandidates(prev => prev.filter(s => s.id !== mergeId));
+      if (activeIdea?.id === keepId || activeIdea?.id === mergeId) {
+        setActiveIdea(result.idea);
+      }
+      if (isDuplicateModalOpen) setIsDuplicateModalOpen(false);
+      pushToast('success', 'Ideas Merged', `"${result.mergedFrom.title}" folded into "${keepTitle || result.idea.title}".`);
+    } catch (err: any) {
+      setAppError(err.message || 'Failed to merge ideas');
+    } finally {
+      setMergingId(null);
     }
   };
 
@@ -606,9 +655,43 @@ export default function App() {
 
               <div>
                 <h3 className="text-[11px] font-bold text-blue-tide uppercase tracking-wider mb-2">Description</h3>
-                <p className="text-sm text-slate-300 leading-relaxed bg-hub-bg/50 rounded-lg border border-hub-border/40 p-3">
+                <p className="text-sm text-slate-300 leading-relaxed bg-hub-bg/50 rounded-lg border border-hub-border/40 p-3 whitespace-pre-wrap">
                   {activeIdea.description || 'No description provided.'}
                 </p>
+              </div>
+
+              <div>
+                <h3 className="text-[11px] font-bold text-blue-tide uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                  <Link2 className="h-3.5 w-3.5" /> Similar Ideas
+                </h3>
+                <div className="flex flex-col gap-2 bg-hub-bg/50 rounded-lg border border-hub-border/40 p-3">
+                  {loadingSimilar && <p className="text-[11px] text-slate-600">Scanning for duplicates...</p>}
+                  {!loadingSimilar && similarIdeas.length === 0 && (
+                    <p className="text-[11px] text-slate-600">No similar ideas found.</p>
+                  )}
+                  {similarIdeas.map((s) => (
+                    <div key={s.id} className="flex items-start justify-between gap-3 bg-hub-card/60 rounded-lg border border-hub-border/50 px-3 py-2">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 mb-0.5">
+                          <span className="text-xs font-semibold text-slate-200 truncate">{s.title}</span>
+                          <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded shrink-0 ${s.score >= 0.45 ? 'bg-amber-900/40 text-amber-400' : 'bg-hub-border text-blue-tide'}`}>
+                            {Math.round(s.score * 100)}% match
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-slate-500 line-clamp-2">{s.description}</p>
+                      </div>
+                      <button
+                        onClick={() => handleMergeIdeas(activeIdea.id, s.id, activeIdea.title)}
+                        disabled={mergingId === s.id}
+                        className="shrink-0 flex items-center gap-1 text-[10px] font-bold text-slate-900 bg-soft-sand hover:bg-slate-200 px-2 py-1.5 rounded transition-colors disabled:opacity-50"
+                        title="Merge this duplicate into the current idea"
+                      >
+                        <GitMerge className="h-3 w-3" />
+                        {mergingId === s.id ? '...' : 'Merge'}
+                      </button>
+                    </div>
+                  ))}
+                </div>
               </div>
 
               <div>
@@ -681,6 +764,45 @@ export default function App() {
       </footer>
 
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
+
+      {/* MODAL: DUPLICATE MERGE PROMPT */}
+      {isDuplicateModalOpen && activeIdea && duplicateCandidates.length > 0 && (
+        <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-hub-card border border-amber-900/50 rounded-xl w-full max-w-lg p-5 relative shadow-2xl">
+            <button onClick={() => setIsDuplicateModalOpen(false)} className="absolute right-4 top-4 text-blue-tide hover:text-slate-100"><X className="h-5 w-5" /></button>
+            <div className="flex items-center space-x-2 text-amber-400 mb-3">
+              <GitMerge className="h-5 w-5" />
+              <h3 className="text-md font-bold uppercase tracking-wider">Possible Duplicate</h3>
+            </div>
+            <p className="text-xs text-slate-400 mb-4 leading-relaxed">
+              Your new idea <span className="text-slate-200 font-semibold">"{activeIdea.title}"</span> looks similar to existing ideas. Merge to combine notes and avoid duplicate work.
+            </p>
+            <div className="space-y-2 mb-4 max-h-48 overflow-y-auto">
+              {duplicateCandidates.map((s) => (
+                <div key={s.id} className="flex items-center justify-between gap-3 bg-hub-bg rounded-lg border border-hub-border px-3 py-2.5">
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-slate-200 truncate">{s.title}</p>
+                    <p className="text-[10px] text-slate-500">{Math.round(s.score * 100)}% semantic match</p>
+                  </div>
+                  <button
+                    onClick={() => handleMergeIdeas(s.id, activeIdea.id, s.title)}
+                    disabled={mergingId === activeIdea.id}
+                    className="shrink-0 text-[10px] font-bold text-slate-900 bg-soft-sand hover:bg-slate-200 px-3 py-1.5 rounded transition-colors disabled:opacity-50"
+                  >
+                    Keep this, merge new in
+                  </button>
+                </div>
+              ))}
+            </div>
+            <button
+              onClick={() => setIsDuplicateModalOpen(false)}
+              className="w-full text-xs font-semibold text-slate-400 hover:text-slate-200 py-2 border border-hub-border rounded-lg"
+            >
+              Keep as separate idea
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* MODAL: IDEA CAPTURE */}
       {isIdeaModalOpen && (

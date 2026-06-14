@@ -8,6 +8,27 @@ export interface SearchResult {
   details: any;
 }
 
+export interface SimilarIdea {
+  id: string;
+  title: string;
+  description: string;
+  status: string;
+  score: number;
+  created_at: string;
+}
+
+export interface CreateIdeaResponse {
+  idea: {
+    id: string;
+    title: string;
+    description: string;
+    status: string;
+    source: string;
+    created_at: string;
+  };
+  similar: SimilarIdea[];
+}
+
 export const api = {
   // 1. Get Dashboard (in case we need to pull manually)
   getDashboard: async (workspaceId: string = '00000000-0000-0000-0000-000000000000') => {
@@ -25,13 +46,32 @@ export const api = {
   },
 
   // 3. Create Idea
-  createIdea: async (title: string, description: string, workspaceId: string = '00000000-0000-0000-0000-000000000000') => {
+  createIdea: async (title: string, description: string, workspaceId: string = '00000000-0000-0000-0000-000000000000'): Promise<CreateIdeaResponse> => {
     const res = await fetch(`${BACKEND_URL}/api/ideas`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ title, description, workspaceId, source: 'slack' })
     });
     if (!res.ok) throw new Error('Failed to create idea');
+    return res.json();
+  },
+
+  // 3b. Find similar ideas
+  getSimilarIdeas: async (ideaId: string, workspaceId: string = '00000000-0000-0000-0000-000000000000'): Promise<SimilarIdea[]> => {
+    const res = await fetch(`${BACKEND_URL}/api/ideas/${ideaId}/similar?workspaceId=${workspaceId}`);
+    if (!res.ok) throw new Error('Failed to fetch similar ideas');
+    const data = await res.json();
+    return data.similar || [];
+  },
+
+  // 3c. Merge duplicate into existing idea (keeps ideaId, archives mergeId)
+  mergeIdeas: async (keepId: string, mergeId: string, workspaceId: string = '00000000-0000-0000-0000-000000000000') => {
+    const res = await fetch(`${BACKEND_URL}/api/ideas/${keepId}/merge`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mergeId, workspaceId })
+    });
+    if (!res.ok) throw new Error('Failed to merge ideas');
     return res.json();
   },
 
