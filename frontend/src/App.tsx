@@ -25,6 +25,7 @@ import { api, type SearchResult } from './services/api';
 import { ToastContainer, type Toast, type ToastType } from './components/Toast';
 import { DailyBriefing } from './components/DailyBriefing';
 import { ProjectWorkspace } from './components/ProjectWorkspace';
+import { CommunicationHub } from './components/CommunicationHub';
 
 const DEFAULT_WORKSPACE = '00000000-0000-0000-0000-000000000000';
 
@@ -172,7 +173,7 @@ export default function App() {
   const [toasts, setToasts] = useState<Toast[]>([]);
 
   const [activeProject, setActiveProject] = useState<any | null>(null);
-  const [activeTool, setActiveTool] = useState<'briefing' | 'onboarding' | 'simulator' | null>(null);
+  const [activeTool, setActiveTool] = useState<'briefing' | 'onboarding' | 'simulator' | 'comms' | null>(null);
   const [activeIdea, setActiveIdea] = useState<any | null>(null);
 
   const [sectionOpen, setSectionOpen] = useState({ ideas: true, projects: true, tools: true });
@@ -287,10 +288,20 @@ export default function App() {
     }
   };
 
-  const handleSaveDeadlineUpdate = (e: React.FormEvent) => {
+  const handleSaveDeadlineUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsProjectModalOpen(false);
-    pushToast('success', 'Deadline Configured', 'Project settings matrix safely applied.');
+    const targetProject = activeProject || projects[0];
+    if (!targetProject) {
+      setIsProjectModalOpen(false);
+      return;
+    }
+    try {
+      await api.updateProjectSettings(targetProject.id, { owner: projOwner, deadline: projDeadline }, DEFAULT_WORKSPACE);
+      setIsProjectModalOpen(false);
+      pushToast('success', 'Settings Saved', `Deadline and owner updated for "${targetProject.title}".`);
+    } catch (err: any) {
+      setAppError(err.message || 'Failed to update project settings');
+    }
   };
 
   const handleSearch = async (e: React.FormEvent) => {
@@ -352,17 +363,18 @@ export default function App() {
   const decisions = dashboardData?.decisions || [];
   const ideas = dashboardData?.ideas || [];
   
-  const projects = (dashboardData?.projects || [])
-    .filter((p: any) => !currentUser || p.owner === currentUser.email)
-    .map((p: any) => ({
-      ...p,
-      activeSince: p.activeSince || '2026-06-10',
-      deadline: p.id === activeProject?.id ? projDeadline : (p.deadline || projDeadline),
-      owner: p.id === activeProject?.id ? projOwner : (p.owner || projOwner)
-    }));
+  // Backend already scopes projects by user when authenticated — no client-side filter needed
+  const projects = (dashboardData?.projects || []).map((p: any) => ({
+    ...p,
+    activeSince: p.activeSince || '2026-06-10',
+    deadline: p.id === activeProject?.id ? projDeadline : (p.deadline || ''),
+    owner: p.id === activeProject?.id ? projOwner : (p.owner || '')
+  }));
 
   const tasks = dashboardData?.tasks || [];
   const blockers = dashboardData?.blockers || [];
+  const messages = dashboardData?.messages || [];
+  const githubPrs = dashboardData?.githubPrs || [];
 
   // Task handler
   const handleCreateTask = async (e: React.FormEvent) => {
@@ -714,9 +726,10 @@ export default function App() {
                   <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Tools</span>
                 </button>
                 {sectionOpen.tools && ([
-                  { label: 'AI Briefing',          key: 'briefing',   icon: <CheckSquare className="h-3.5 w-3.5" /> },
-                  { label: 'Onboarding Generator', key: 'onboarding', icon: <FileDown    className="h-3.5 w-3.5" /> },
-                  { label: 'Event Simulator',      key: 'simulator',  icon: <Activity    className="h-3.5 w-3.5" /> },
+                  { label: 'Comms Hub',            key: 'comms',      icon: <MessageSquare className="h-3.5 w-3.5" /> },
+                  { label: 'AI Briefing',          key: 'briefing',   icon: <CheckSquare   className="h-3.5 w-3.5" /> },
+                  { label: 'Onboarding Generator', key: 'onboarding', icon: <FileDown      className="h-3.5 w-3.5" /> },
+                  { label: 'Event Simulator',      key: 'simulator',  icon: <Activity      className="h-3.5 w-3.5" /> },
                 ] as const).map(tool => (
                   <div
                     key={tool.key}
@@ -736,6 +749,16 @@ export default function App() {
 
         {/* CENTER FRAME INTERACTIVE CONTENT AREA */}
         <section className="flex-1 min-w-0">
+
+          {activeTool === 'comms' && (
+            <CommunicationHub
+              messages={messages}
+              decisions={decisions}
+              actionItems={dashboardData?.actionItems || []}
+              githubPrs={githubPrs}
+              currentUser={currentUser}
+            />
+          )}
 
           {activeTool === 'briefing' && (
             <DailyBriefing workspaceId={DEFAULT_WORKSPACE} />
@@ -891,19 +914,26 @@ export default function App() {
               decisions={decisions}
               blockers={blockers}
               tasks={tasks.filter((t: any) => activeProject ? t.project_id === activeProject.id : true)}
-              projects={activeProject ? [activeProject] : (projects.length > 0 ? projects : [{ id: 'p1', title: 'StartupHub Core', status: 'active', activeSince: '2026-06-10', deadline: projDeadline, owner: projOwner }])}
+              projects={activeProject ? [activeProject] : projects}
               users={workspaceUsers}
               currentUser={currentUser}
               onAddDeadlineClick={() => {
-                if (projects.length > 0 && !activeProject) {
-                  setActiveProject(projects[0]);
+                const target = activeProject || (projects.length > 0 ? projects[0] : null);
+                if (target) {
+                  setActiveProject(target);
+                  setProjOwner(target.owner || '');
+                  setProjDeadline(target.deadline || '');
                 }
+                setSelectedIdeaForProj(null);
                 setIsProjectModalOpen(true);
               }}
               onAddTaskClick={() => {
-                if (!activeProject && projects.length > 0) {
-                  setActiveProject(projects[0]);
+                const target = activeProject || (projects.length > 0 ? projects[0] : null);
+                if (!target) {
+                  pushToast('warning', 'No Project', 'Convert an idea to a project first before adding tasks.');
+                  return;
                 }
+                setActiveProject(target);
                 setIsTaskModalOpen(true);
               }}
             />
