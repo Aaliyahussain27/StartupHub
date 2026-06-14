@@ -28,11 +28,60 @@ const log = (level: string, message: string) => {
   console.log(`[${ts}] [${level}] [API-ROUTES] - ${message}`);
 };
 
+// Authentication Middleware
+export async function authenticateUser(req: Request, res: Response, next: NextFunction) {
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const token = authHeader.substring(7);
+    try {
+      const user = await db.getSessionUser(token);
+      if (user) {
+        (req as any).user = user;
+      }
+    } catch (err) {
+      log('WARN', 'Session lookup failed: ' + (err as Error).message);
+    }
+  }
+  next();
+}
+
+export function requireAuth(req: Request, res: Response, next: NextFunction) {
+  if (!(req as any).user) {
+    res.status(401).json({ error: 'Authentication required. Please log in.' });
+    return;
+  }
+  next();
+}
+
+// Role Validation helper
+async function canModifyProject(userId: string, projectId: string): Promise<boolean> {
+  const members = await db.getProjectMembers(projectId);
+  const member = members.find(m => m.user_id === userId);
+  if (!member) return false;
+  return member.role === 'owner' || member.role === 'editor';
+}
+
+router.use(authenticateUser);
+
 // 1. GET /api/dashboard
 router.get('/dashboard', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const workspaceId = (req.query.workspaceId as string) || DEFAULT_WORKSPACE_ID;
     const state = await getDashboardState(workspaceId);
+    
+    // Filter projects explicitly belonging/assigned to user in project_members
+    const user = (req as any).user;
+    if (user) {
+      const userProjects = await db.getUserProjects(user.id);
+      const userProjectIds = new Set(userProjects.map(p => p.id));
+      state.projects = state.projects.filter(p => userProjectIds.has(p.id));
+      state.tasks = state.tasks.filter(t => userProjectIds.has(t.project_id));
+      state.blockers = state.blockers.filter(b => {
+        const taskObj = state.tasks.find(t => t.id === b.taskId);
+        return taskObj ? userProjectIds.has(taskObj.project_id) : false;
+      });
+    }
+    
     res.json(state);
   } catch (err) {
     next(err);
@@ -422,11 +471,12 @@ async function processMessageAsync(
 }
 
 // 7. POST /api/projects/from-idea/:ideaId
-router.post('/projects/from-idea/:ideaId', async (req: Request, res: Response, next: NextFunction) => {
+router.post('/projects/from-idea/:ideaId', requireAuth, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { ideaId } = req.params;
     const { owner, deadline } = req.body;
     const workspaceId = req.body.workspaceId || DEFAULT_WORKSPACE_ID;
+    const user = (req as any).user;
 
     log('INFO', `Converting idea ID ${ideaId} to active project.`);
 
@@ -456,10 +506,29 @@ router.post('/projects/from-idea/:ideaId', async (req: Request, res: Response, n
       idea_id: ideaId,
       title: idea.title,
       description: breakdown.description || idea.description,
-      owner: owner || 'Unassigned',
+      owner: owner || user.email,
       deadline: deadline || 'Friday',
       status: 'active'
     });
+
+    // Add current user as project owner
+    await db.addProjectMember({
+      user_id: user.id,
+      project_id: project.id,
+      role: 'owner'
+    });
+
+    // If a different owner is specified and has a user account, add them as owner as well
+    if (owner && owner !== user.email) {
+      const otherUser = await db.getUserByEmail(owner);
+      if (otherUser) {
+        await db.addProjectMember({
+          user_id: otherUser.id,
+          project_id: project.id,
+          role: 'owner'
+        });
+      }
+    }
 
     // 5. Insert tasks
     const createdTasks: Task[] = [];
@@ -468,10 +537,23 @@ router.post('/projects/from-idea/:ideaId', async (req: Request, res: Response, n
         workspace_id: workspaceId,
         project_id: project.id,
         title: t.title,
-        assigned_to: t.assignedTo || owner || 'Unassigned',
+        assigned_to: t.assignedTo || owner || user.email,
         status: 'todo',
         dependencies: []
       });
+
+      // If task is assigned to an existing user, register them as editor/member
+      if (t.assignedTo) {
+        const assignedUser = await db.getUserByEmail(t.assignedTo);
+        if (assignedUser) {
+          await db.addProjectMember({
+            user_id: assignedUser.id,
+            project_id: project.id,
+            role: 'editor'
+          });
+        }
+      }
+
       createdTasks.push(task);
     }
 
@@ -714,13 +796,30 @@ router.post('/pdf/generate', async (req: Request, res: Response, next: NextFunct
 });
 
 // Update task status (Helper endpoint for frontend interaction)
-router.post('/tasks/:id/status', async (req: Request, res: Response, next: NextFunction) => {
+router.post('/tasks/:id/status', requireAuth, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { id } = req.params;
     const { status, dependencies } = req.body;
     const workspaceId = req.body.workspaceId || DEFAULT_WORKSPACE_ID;
+    const user = (req as any).user;
 
     log('INFO', `Updating task ${id} status to: ${status}`);
+
+    // Find the task to get project_id
+    const tasks = await db.getTasks(workspaceId);
+    const task = tasks.find(t => t.id === id);
+    if (!task) {
+      res.status(404).json({ error: 'Task not found.' });
+      return;
+    }
+
+    // Role Guard: Only project owners/editors can edit tasks or change statuses
+    const isAllowed = await canModifyProject(user.id, task.project_id);
+    if (!isAllowed) {
+      res.status(403).json({ error: 'Access Denied: Only project owners or editors can edit tasks or change statuses.' });
+      return;
+    }
+
     const updated = await db.updateTask(id, { status, dependencies });
 
     if (updated) {
@@ -836,6 +935,200 @@ router.post('/action-items/:id/status', async (req: Request, res: Response, next
       res.json({ success: true });
     } else {
       res.status(404).json({ error: 'Action item not found.' });
+    }
+  } catch (err) {
+    next(err);
+  }
+});
+
+// AUTHENTICATION & MANAGEMENT ENDPOINTS
+
+// Auth: Register
+router.post('/auth/register', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { email, password } = req.body;
+    if (!email || !password) {
+      res.status(400).json({ error: 'Email and password are required.' });
+      return;
+    }
+    const existingUser = await db.getUserByEmail(email);
+    if (existingUser) {
+      res.status(400).json({ error: 'User with this email already exists.' });
+      return;
+    }
+    const userId = uuidv4();
+    const workspaceId = DEFAULT_WORKSPACE_ID;
+    const user = await db.createUser({
+      id: userId,
+      workspace_id: workspaceId,
+      email,
+      password
+    });
+    
+    // Create session
+    const token = uuidv4();
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+    await db.createSession({
+      token,
+      user_id: userId,
+      expires_at: expiresAt
+    });
+
+    res.status(201).json({
+      token,
+      user: {
+        id: user.id,
+        email: user.email,
+        workspace_id: user.workspace_id
+      }
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Auth: Login
+router.post('/auth/login', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { email, password } = req.body;
+    if (!email || !password) {
+      res.status(400).json({ error: 'Email and password are required.' });
+      return;
+    }
+    const user = await db.getUserByEmail(email);
+    if (!user || user.password !== password) {
+      res.status(401).json({ error: 'Invalid email or password.' });
+      return;
+    }
+    
+    // Create session
+    const token = uuidv4();
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+    await db.createSession({
+      token,
+      user_id: user.id,
+      expires_at: expiresAt
+    });
+
+    res.json({
+      token,
+      user: {
+        id: user.id,
+        email: user.email,
+        workspace_id: user.workspace_id
+      }
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Auth: Me
+router.get('/auth/me', requireAuth, async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  res.json({
+    user: {
+      id: user.id,
+      email: user.email,
+      workspace_id: user.workspace_id
+    }
+  });
+});
+
+// Get workspace users
+router.get('/users', requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const workspaceId = (req.query.workspaceId as string) || DEFAULT_WORKSPACE_ID;
+    const users = await db.getUsers(workspaceId);
+    res.json(users.map(u => ({ id: u.id, email: u.email })));
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Tasks: Create CRUD endpoint
+router.post('/tasks', requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { projectId, title, assignedTo, dependencies } = req.body;
+    const workspaceId = req.body.workspaceId || DEFAULT_WORKSPACE_ID;
+    const user = (req as any).user;
+
+    if (!projectId || !title) {
+      res.status(400).json({ error: 'Project ID and Title are required.' });
+      return;
+    }
+
+    // Role Guard: Only project owners/editors can create tasks
+    const isAllowed = await canModifyProject(user.id, projectId);
+    if (!isAllowed) {
+      res.status(403).json({ error: 'Access Denied: Only project owners or editors can create tasks.' });
+      return;
+    }
+
+    const task = await db.insertTask({
+      workspace_id: workspaceId,
+      project_id: projectId,
+      title,
+      assigned_to: assignedTo || 'Unassigned',
+      status: 'todo',
+      dependencies: dependencies || []
+    });
+
+    // Register assigned user as project editor if not already
+    if (assignedTo) {
+      const assignedUser = await db.getUserByEmail(assignedTo);
+      if (assignedUser) {
+        const members = await db.getProjectMembers(projectId);
+        const exists = members.some(m => m.user_id === assignedUser.id);
+        if (!exists) {
+          await db.addProjectMember({
+            user_id: assignedUser.id,
+            project_id: projectId,
+            role: 'editor'
+          });
+        }
+      }
+    }
+
+    await broadcastDashboardUpdate(workspaceId);
+    res.status(201).json(task);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Projects: Settings/Deadline/Owner updates
+router.post('/projects/:id/settings', requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params;
+    const { owner, deadline, title, description, status } = req.body;
+    const workspaceId = req.body.workspaceId || DEFAULT_WORKSPACE_ID;
+    const user = (req as any).user;
+
+    // Role Guard: Only owners/editors can change project settings
+    const isAllowed = await canModifyProject(user.id, id);
+    if (!isAllowed) {
+      res.status(403).json({ error: 'Access Denied: Only project owners or editors can change target deadlines or assignees.' });
+      return;
+    }
+
+    const updated = await db.updateProject(id, { owner, deadline, title, description, status });
+    if (updated) {
+      // If owner changed and matches user account, make them owner
+      if (owner) {
+        const targetUser = await db.getUserByEmail(owner);
+        if (targetUser) {
+          await db.addProjectMember({
+            user_id: targetUser.id,
+            project_id: id,
+            role: 'owner'
+          });
+        }
+      }
+      await broadcastDashboardUpdate(workspaceId);
+      res.json({ success: true });
+    } else {
+      res.status(404).json({ error: 'Project not found.' });
     }
   } catch (err) {
     next(err);

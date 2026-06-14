@@ -18,8 +18,22 @@ export interface User {
   id: string;
   workspace_id: string;
   email: string;
+  password?: string;
   created_at: Date | string;
 }
+
+export interface ProjectMember {
+  user_id: string;
+  project_id: string;
+  role: 'owner' | 'editor' | 'viewer';
+}
+
+export interface UserSession {
+  token: string;
+  user_id: string;
+  expires_at: Date | string;
+}
+
 
 export interface Message {
   id: string;
@@ -127,6 +141,8 @@ interface FallbackDatabase {
   tasks: Task[];
   github_prs: GitHubPR[];
   onboarding_pdfs: OnboardingPDF[];
+  project_members: ProjectMember[];
+  user_sessions: UserSession[];
 }
 
 const FALLBACK_DB_PATH = path.join(__dirname, '../../db_fallback.json');
@@ -144,7 +160,9 @@ let fallbackData: FallbackDatabase = {
   projects: [],
   tasks: [],
   github_prs: [],
-  onboarding_pdfs: []
+  onboarding_pdfs: [],
+  project_members: [],
+  user_sessions: []
 };
 
 // Log helper
@@ -298,6 +316,26 @@ async function runPostgresMigrations(client: any) {
         pdf_url TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
+      
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS password TEXT;
+      
+      CREATE TABLE IF NOT EXISTS project_members (
+        user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+        project_id UUID REFERENCES projects(id) ON DELETE CASCADE,
+        role TEXT CHECK (role IN ('owner', 'editor', 'viewer')),
+        PRIMARY KEY (user_id, project_id)
+      );
+
+      CREATE TABLE IF NOT EXISTS user_sessions (
+        token TEXT PRIMARY KEY,
+        user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+        expires_at TIMESTAMP
+      );
+    `);
+
+    // Create unique index for user email after adding columns
+    await client.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS users_email_idx ON users(email);
     `);
     
     // Seed default workspace and user if they don't exist
@@ -306,8 +344,8 @@ async function runPostgresMigrations(client: any) {
       VALUES ('${DEFAULT_WORKSPACE_ID}', 'Default Startup Workspace')
       ON CONFLICT (id) DO NOTHING;
       
-      INSERT INTO users (id, workspace_id, email)
-      VALUES ('${DEFAULT_USER_ID}', '${DEFAULT_WORKSPACE_ID}', 'founder@startuphub.ai')
+      INSERT INTO users (id, workspace_id, email, password)
+      VALUES ('${DEFAULT_USER_ID}', '${DEFAULT_WORKSPACE_ID}', 'founder@startuphub.ai', 'password')
       ON CONFLICT (id) DO NOTHING;
     `);
     
@@ -325,6 +363,8 @@ function setupFallbackMode() {
     try {
       const dataStr = fs.readFileSync(FALLBACK_DB_PATH, 'utf-8');
       fallbackData = JSON.parse(dataStr);
+      if (!fallbackData.project_members) fallbackData.project_members = [];
+      if (!fallbackData.user_sessions) fallbackData.user_sessions = [];
       log('INFO', `Loaded local JSON database from: ${FALLBACK_DB_PATH}`);
       return;
     } catch (err) {
@@ -338,7 +378,7 @@ function setupFallbackMode() {
       { id: DEFAULT_WORKSPACE_ID, name: 'Default Startup Workspace', created_at: new Date() }
     ],
     users: [
-      { id: DEFAULT_USER_ID, workspace_id: DEFAULT_WORKSPACE_ID, email: 'founder@startuphub.ai', created_at: new Date() }
+      { id: DEFAULT_USER_ID, workspace_id: DEFAULT_WORKSPACE_ID, email: 'founder@startuphub.ai', password: 'password', created_at: new Date() }
     ],
     messages: [],
     decisions: [],
@@ -348,7 +388,9 @@ function setupFallbackMode() {
     projects: [],
     tasks: [],
     github_prs: [],
-    onboarding_pdfs: []
+    onboarding_pdfs: [],
+    project_members: [],
+    user_sessions: []
   };
 
   saveFallbackData();
@@ -706,6 +748,28 @@ export const db = {
     return fullProj;
   },
 
+  updateProject: async (id: string, fields: Partial<Pick<Project, 'deadline' | 'owner' | 'status' | 'title' | 'description'>>): Promise<boolean> => {
+    if (isFallbackMode || !pgPool) {
+      const idx = fallbackData.projects.findIndex(p => p.id === id);
+      if (idx > -1) {
+        fallbackData.projects[idx] = {
+          ...fallbackData.projects[idx],
+          ...fields
+        };
+        saveFallbackData();
+        return true;
+      }
+      return false;
+    }
+    const keys = Object.keys(fields);
+    if (keys.length === 0) return false;
+    const setQuery = keys.map((k, index) => `${k} = $${index + 1}`).join(', ');
+    const params = keys.map(k => (fields as any)[k]);
+    params.push(id);
+    const res = await pgPool.query(`UPDATE projects SET ${setQuery} WHERE id = $${params.length}`, params);
+    return (res.rowCount ?? 0) > 0;
+  },
+
   // TASKS
   getTasks: async (workspaceId: string = DEFAULT_WORKSPACE_ID): Promise<Task[]> => {
     if (isFallbackMode || !pgPool) {
@@ -888,5 +952,106 @@ export const db = {
       score: Number(r.score),
       details: typeof r.details === 'string' ? JSON.parse(r.details) : r.details
     }));
+  },
+
+  // USER & AUTH EXTENSIONS
+  getUserByEmail: async (email: string): Promise<User | null> => {
+    if (isFallbackMode || !pgPool) {
+      return fallbackData.users.find(u => u.email === email) || null;
+    }
+    const res = await pgPool.query('SELECT * FROM users WHERE email = $1', [email]);
+    return res.rows[0] || null;
+  },
+
+  createUser: async (user: Omit<User, 'created_at'>): Promise<User> => {
+    const newUser: User = { ...user, created_at: new Date() };
+    if (isFallbackMode || !pgPool) {
+      fallbackData.users.push(newUser);
+      saveFallbackData();
+      return newUser;
+    }
+    await pgPool.query(
+      'INSERT INTO users (id, workspace_id, email, password) VALUES ($1, $2, $3, $4)',
+      [newUser.id, newUser.workspace_id, newUser.email, newUser.password || '']
+    );
+    return newUser;
+  },
+
+  getUsers: async (workspaceId: string = DEFAULT_WORKSPACE_ID): Promise<User[]> => {
+    if (isFallbackMode || !pgPool) {
+      return fallbackData.users.filter(u => u.workspace_id === workspaceId);
+    }
+    const res = await pgPool.query('SELECT * FROM users WHERE workspace_id = $1', [workspaceId]);
+    return res.rows;
+  },
+
+  createSession: async (session: UserSession): Promise<UserSession> => {
+    if (isFallbackMode || !pgPool) {
+      if (!fallbackData.user_sessions) fallbackData.user_sessions = [];
+      fallbackData.user_sessions.push(session);
+      saveFallbackData();
+      return session;
+    }
+    await pgPool.query(
+      'INSERT INTO user_sessions (token, user_id, expires_at) VALUES ($1, $2, $3)',
+      [session.token, session.user_id, session.expires_at]
+    );
+    return session;
+  },
+
+  getSessionUser: async (token: string): Promise<User | null> => {
+    if (isFallbackMode || !pgPool) {
+      if (!fallbackData.user_sessions) fallbackData.user_sessions = [];
+      const sess = fallbackData.user_sessions.find(s => s.token === token);
+      if (!sess) return null;
+      if (new Date(sess.expires_at).getTime() < Date.now()) {
+        fallbackData.user_sessions = fallbackData.user_sessions.filter(s => s.token !== token);
+        saveFallbackData();
+        return null;
+      }
+      return fallbackData.users.find(u => u.id === sess.user_id) || null;
+    }
+    const res = await pgPool.query(
+      'SELECT u.* FROM users u JOIN user_sessions s ON u.id = s.user_id WHERE s.token = $1 AND s.expires_at > CURRENT_TIMESTAMP',
+      [token]
+    );
+    return res.rows[0] || null;
+  },
+
+  addProjectMember: async (member: ProjectMember): Promise<ProjectMember> => {
+    if (isFallbackMode || !pgPool) {
+      if (!fallbackData.project_members) fallbackData.project_members = [];
+      fallbackData.project_members = fallbackData.project_members.filter(m => !(m.user_id === member.user_id && m.project_id === member.project_id));
+      fallbackData.project_members.push(member);
+      saveFallbackData();
+      return member;
+    }
+    await pgPool.query(
+      'INSERT INTO project_members (user_id, project_id, role) VALUES ($1, $2, $3) ON CONFLICT (user_id, project_id) DO UPDATE SET role = EXCLUDED.role',
+      [member.user_id, member.project_id, member.role]
+    );
+    return member;
+  },
+
+  getProjectMembers: async (projectId: string): Promise<ProjectMember[]> => {
+    if (isFallbackMode || !pgPool) {
+      if (!fallbackData.project_members) fallbackData.project_members = [];
+      return fallbackData.project_members.filter(m => m.project_id === projectId);
+    }
+    const res = await pgPool.query('SELECT * FROM project_members WHERE project_id = $1', [projectId]);
+    return res.rows;
+  },
+
+  getUserProjects: async (userId: string): Promise<Project[]> => {
+    if (isFallbackMode || !pgPool) {
+      if (!fallbackData.project_members) fallbackData.project_members = [];
+      const projIds = fallbackData.project_members.filter(m => m.user_id === userId).map(m => m.project_id);
+      return fallbackData.projects.filter(p => projIds.includes(p.id));
+    }
+    const res = await pgPool.query(
+      'SELECT p.* FROM projects p JOIN project_members m ON p.id = m.project_id WHERE m.user_id = $1',
+      [userId]
+    );
+    return res.rows;
   }
 };
