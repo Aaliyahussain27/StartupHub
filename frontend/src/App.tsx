@@ -273,7 +273,6 @@ export default function App() {
     setMockGithubDesc('');
   }, [mockSource]);
 
-<<<<<<< HEAD
   useEffect(() => {
     if (!activeIdea?.id) {
       setSimilarIdeas([]);
@@ -286,9 +285,7 @@ export default function App() {
       .finally(() => setLoadingSimilar(false));
   }, [activeIdea?.id]);
 
-=======
   // Network Form Action Callbacks
->>>>>>> d13a5154b06eb81e4c4cc2ef43c723f540e2d2cd
   const handleCreateIdea = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newIdeaTitle || !newIdeaDesc) return;
