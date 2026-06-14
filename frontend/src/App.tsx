@@ -39,7 +39,7 @@ export function BrandLogo() {
         <h1 className="text-lg font-extrabold tracking-wider text-slate-900 dark:text-slate-100 transition-colors">
           STARTUP<span className="text-slate-500 dark:text-soft-sand font-medium">HUB</span>
         </h1>
-        <p className="text-[10px] font-semibold text-slate-400 dark:text-blue-tide tracking-widest uppercase mt-[-2px]">Workspace</p>
+        <p className="text-[10px] font-semibold text-slate-400 dark:text-slate-400 tracking-widest uppercase mt-[-2px]">Workspace</p>
       </div>
     </div>
   );
@@ -419,7 +419,7 @@ export default function App() {
                 placeholder="you@startuphub.ai"
                 value={authEmail}
                 onChange={(e) => setAuthEmail(e.target.value)}
-                className="w-full bg-slate-950 text-sm text-slate-200 px-3 py-2.5 rounded-lg border border-slate-800 focus:outline-none focus:border-blue-500/80 transition-colors"
+                className="w-full bg-slate-950 text-sm text-slate-200 px-3 py-2.5 rounded-lg border border-slate-800 focus:outline-none focus:border-glow-indigo/80 transition-colors"
                 required
                 autoFocus
               />
@@ -432,7 +432,7 @@ export default function App() {
                 placeholder="••••••••"
                 value={authPassword}
                 onChange={(e) => setAuthPassword(e.target.value)}
-                className="w-full bg-slate-950 text-sm text-slate-200 px-3 py-2.5 rounded-lg border border-slate-800 focus:outline-none focus:border-blue-500/80 transition-colors"
+                className="w-full bg-slate-950 text-sm text-slate-200 px-3 py-2.5 rounded-lg border border-slate-800 focus:outline-none focus:border-glow-indigo/80 transition-colors"
                 required
               />
             </div>
@@ -462,10 +462,10 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-hub-bg text-slate-900 dark:text-slate-100 flex flex-col font-sans selection:bg-blue-tide/30 transition-colors duration-200">
+    <div className="min-h-screen bg-slate-50 dark:bg-hub-bg text-slate-900 dark:text-slate-100 flex flex-col font-sans selection:bg-glow-indigo/20 transition-colors duration-200">
 
       {/* HEADER ROW */}
-      <header className="border-b border-slate-200 dark:border-hub-border bg-white/80 dark:bg-hub-bg/80 backdrop-blur sticky top-0 z-40 px-6 py-4 flex items-center justify-between transition-colors">
+      <header className="border-b border-slate-200 dark:border-hub-border bg-white/80 dark:bg-hub-bg/80 backdrop-blur sticky top-0 z-40 px-4 py-3 flex items-center gap-2 transition-colors min-w-0">
         <BrandLogo />
 
         <div className="flex items-center space-x-2 bg-slate-100 dark:bg-hub-card px-3 py-1.5 rounded-full border border-slate-200 dark:border-hub-border text-xs transition-colors">
@@ -473,53 +473,55 @@ export default function App() {
           <span className="text-slate-600 dark:text-slate-300 font-medium">{isConnected ? 'Live Connected' : 'Disconnected (Offline)'}</span>
         </div>
 
-        <form onSubmit={handleSearch} className="flex-1 max-w-md mx-6 relative">
+        <form onSubmit={handleSearch} className="flex-1 min-w-0 max-w-xs mx-2 relative">
           <input
             type="text"
             placeholder="Semantic vector search across Slack, GitHub, notes..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-slate-100 dark:bg-hub-card/85 text-sm text-slate-800 dark:text-slate-200 pl-10 pr-4 py-2 rounded-lg border border-slate-200 dark:border-hub-border focus:outline-none focus:border-slate-400 dark:focus:border-blue-tide transition-colors"
+            className="w-full bg-slate-100 dark:bg-hub-card/85 text-sm text-slate-800 dark:text-slate-200 pl-10 pr-4 py-2 rounded-lg border border-slate-200 dark:border-hub-border focus:outline-none focus:border-slate-400 dark:focus:border-glow-indigo/60 transition-colors"
           />
           {isSearching
             ? <span className="absolute left-3 top-3.5 h-3.5 w-3.5 border-2 border-slate-400 dark:border-blue-tide border-t-transparent rounded-full animate-spin"></span>
-            : <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400 dark:text-blue-tide" />}
+            : <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400 dark:text-slate-400" />}
           {searchQuery && (
-            <button type="button" onClick={() => { setSearchQuery(''); setSearchResults(null); }} className="absolute right-3 top-2.5 text-slate-400 dark:text-blue-tide hover:text-slate-900 dark:hover:text-slate-100">
+            <button type="button" onClick={() => { setSearchQuery(''); setSearchResults(null); }} className="absolute right-3 top-2.5 text-slate-400 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100">
               <X className="h-4 w-4" />
             </button>
           )}
         </form>
 
-        <div className="flex items-center space-x-3">
+        <div className="flex items-center gap-2 ml-auto shrink-0">
           {currentUser && (
-            <div className="flex items-center gap-2 mr-2">
-              <span className="hidden md:inline text-xs font-semibold bg-slate-100 dark:bg-hub-card px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-hub-border text-slate-700 dark:text-slate-300">
+            <div className="flex items-center gap-2">
+              <span className="hidden lg:inline text-xs font-semibold bg-slate-100 dark:bg-hub-card px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-hub-border text-slate-700 dark:text-slate-300 max-w-[140px] truncate">
                 {currentUser.email}
               </span>
               <button
                 onClick={handleLogout}
-                className="text-xs bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-500 dark:text-rose-400 px-3 py-1.5 rounded-lg font-semibold transition-all"
+                className="text-xs bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-500 dark:text-rose-400 px-3 py-1.5 rounded-lg font-semibold transition-all whitespace-nowrap"
               >
                 Sign Out
               </button>
             </div>
           )}
 
-          {/* THEME TOGGLE ELEMENT */}
+          {/* THEME TOGGLE */}
           <button 
             onClick={toggleTheme}
-            className="p-2 rounded-lg bg-slate-100 dark:bg-hub-card border border-slate-200 dark:border-hub-border text-slate-600 dark:text-soft-sand hover:bg-slate-200 dark:hover:bg-hub-border transition-all flex items-center justify-center"
-            title="Toggle Theme Display Mode"
+            className="p-2 rounded-lg bg-slate-100 dark:bg-hub-card border border-slate-200 dark:border-hub-border hover:bg-slate-200 dark:hover:bg-hub-border transition-all flex items-center justify-center shrink-0"
+            title="Toggle Theme"
           >
             {theme === 'dark' ? <Sun className="h-4 w-4 text-amber-400" /> : <Moon className="h-4 w-4 text-slate-700" />}
           </button>
 
-          <div className="hidden md:block text-xs text-slate-500 dark:text-blue-tide bg-slate-100 dark:bg-hub-card/50 px-2 py-1.5 rounded border border-slate-200 dark:border-hub-border transition-colors">
-            Quick Add: <kbd className="bg-slate-200 dark:bg-hub-border px-1 rounded text-slate-800 dark:text-slate-100">Cmd+K</kbd>
-          </div>
-          <button onClick={() => setIsIdeaModalOpen(true)} className="flex items-center space-x-1.5 bg-slate-100 dark:bg-blue-tide/15 hover:bg-slate-200 dark:hover:bg-blue-tide/25 text-slate-800 dark:text-blue-tide px-4 py-2 rounded-lg border border-slate-300 dark:border-blue-tide/30 text-sm font-semibold transition-all">
-            <Plus className="h-4 w-4" /><span>New Idea</span>
+          {/* NEW IDEA BUTTON — always visible */}
+          <button
+            onClick={() => setIsIdeaModalOpen(true)}
+            className="flex items-center gap-1.5 bg-glow-indigo hover:bg-glow-indigo/90 px-3 py-2 rounded-lg text-sm font-semibold transition-all active:scale-95 shadow-md shadow-glow-indigo/20 shrink-0 whitespace-nowrap"
+          >
+            <Plus className="h-4 w-4" />
+            <span className="hidden sm:inline">New Idea</span>
           </button>
         </div>
       </header>
@@ -540,14 +542,14 @@ export default function App() {
               <h3 className="text-md font-bold text-slate-800 dark:text-soft-sand flex items-center space-x-2">
                 <Search className="h-5 w-5" /><span>Vector Search Results ({searchResults.length} matches)</span>
               </h3>
-              <button onClick={() => { setSearchQuery(''); setSearchResults(null); }} className="text-xs text-slate-600 dark:text-blue-tide hover:text-slate-900 dark:hover:text-slate-200 border border-slate-200 dark:border-hub-border px-2 py-1 rounded">Close Search</button>
+              <button onClick={() => { setSearchQuery(''); setSearchResults(null); }} className="text-xs text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 border border-slate-200 dark:border-hub-border px-2 py-1 rounded">Close Search</button>
             </div>
             <div className="space-y-3">
               {searchResults.map((r) => (
                 <div key={r.id} className="p-3 bg-slate-50 dark:bg-hub-bg rounded border border-slate-200 dark:border-hub-border flex items-start justify-between space-x-4 transition-colors">
                   <div className="flex-1">
                     <div className="flex items-center space-x-2 mb-1.5">
-                      <span className="text-xs font-semibold px-2 py-0.5 rounded bg-slate-200 dark:bg-hub-border text-slate-700 dark:text-blue-tide uppercase tracking-wider">{r.type}</span>
+                      <span className="text-xs font-semibold px-2 py-0.5 rounded bg-slate-200 dark:bg-hub-border text-slate-700 dark:text-slate-400 uppercase tracking-wider">{r.type}</span>
                       {r.details?.sender && <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">Sender: {r.details.sender}</span>}
                     </div>
                     <p className="text-sm text-slate-700 dark:text-slate-200">{r.text}</p>
@@ -583,7 +585,7 @@ export default function App() {
                 <button onClick={() => { setSidebarCollapsed(false); setSectionOpen(prev => ({ ...prev, ideas: true })); }} className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-hub-bg/60 text-amber-500 dark:text-amber-400" title="Ideas">
                   <Lightbulb className="h-4 w-4" />
                 </button>
-                <button onClick={() => { setSidebarCollapsed(false); setSectionOpen(prev => ({ ...prev, projects: true })); }} className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-hub-bg/60 text-slate-600 dark:text-blue-tide" title="Projects">
+                <button onClick={() => { setSidebarCollapsed(false); setSectionOpen(prev => ({ ...prev, projects: true })); }} className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-hub-bg/60 text-slate-600 dark:text-slate-400" title="Projects">
                   <Layers className="h-4 w-4" />
                 </button>
                 <button onClick={() => { setSidebarCollapsed(false); setSectionOpen(prev => ({ ...prev, tools: true })); }} className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-hub-bg/60 text-slate-400 dark:text-slate-500" title="Tools">
@@ -615,17 +617,17 @@ export default function App() {
                           <span className={`text-[12px] truncate flex-1 ${activeIdea?.id === i.id ? 'text-slate-900 dark:text-slate-100' : 'text-slate-700 dark:text-slate-300'}`}>{i.title}</span>
                           <button
                             onClick={(e) => { e.stopPropagation(); setOpenCommentIdeaId(openCommentIdeaId === i.id ? null : i.id); setCommentDraft(''); }}
-                            className="text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-blue-tide transition-colors ml-2 shrink-0 relative"
+                            className="text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-glow-indigo transition-colors ml-2 shrink-0 relative"
                             title="Add comment"
                           >
                             <MessageSquarePlus className="h-3.5 w-3.5" />
                             {(ideaComments[i.id]?.length || 0) > 0 && (
-                              <span className="absolute -top-1.5 -right-1.5 text-[8px] bg-blue-500 dark:bg-blue-tide text-white dark:text-slate-900 rounded-full h-3.5 w-3.5 flex items-center justify-center font-bold">{ideaComments[i.id].length}</span>
+                              <span className="absolute -top-1.5 -right-1.5 text-[8px] bg-glow-indigo text-white rounded-full h-3.5 w-3.5 flex items-center justify-center font-bold">{ideaComments[i.id].length}</span>
                             )}
                           </button>
                           <button
                             onClick={(e) => { e.stopPropagation(); setSelectedIdeaForProj(i); setIsProjectModalOpen(true); }}
-                            className="text-[10px] text-blue-600 dark:text-blue-tide opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap ml-2"
+                            className="text-[10px] text-glow-indigo opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap ml-2"
                           >
                             → Project
                           </button>
@@ -637,7 +639,7 @@ export default function App() {
                           <div className="mt-1.5 pl-1 flex flex-col gap-1.5" onClick={(e) => e.stopPropagation()}>
                             {(ideaComments[i.id] || []).map((c, idx) => (
                               <div key={idx} className="flex items-start gap-1.5 text-[10px] text-slate-600 dark:text-slate-400 bg-slate-50 dark:bg-hub-bg/60 rounded px-2 py-1 border border-slate-100 dark:border-0">
-                                <MessageSquare className="h-3 w-3 mt-0.5 shrink-0 text-blue-500 dark:text-blue-tide" />
+                                <MessageSquare className="h-3 w-3 mt-0.5 shrink-0 text-glow-indigo" />
                                 <span className="leading-snug">{c}</span>
                               </div>
                             ))}
@@ -649,7 +651,7 @@ export default function App() {
                                 onChange={(e) => setCommentDraft(e.target.value)}
                                 onKeyDown={(e) => { if (e.key === 'Enter') addIdeaComment(i.id); if (e.key === 'Escape') setOpenCommentIdeaId(null); }}
                                 placeholder="Add a comment..."
-                                className="flex-1 bg-slate-50 dark:bg-hub-bg text-[11px] text-slate-800 dark:text-slate-200 px-2 py-1 rounded border border-slate-200 dark:border-hub-border focus:outline-none focus:border-blue-500 dark:focus:border-blue-tide"
+                                className="flex-1 bg-slate-50 dark:bg-hub-bg text-[11px] text-slate-800 dark:text-slate-200 px-2 py-1 rounded border border-slate-200 dark:border-hub-border focus:outline-none focus:border-glow-indigo/60 focus:ring-1 focus:ring-glow-indigo/20 transition-all"
                               />
                               <button onClick={() => addIdeaComment(i.id)} className="text-[10px] font-bold text-slate-800 dark:text-slate-900 bg-slate-200 dark:bg-soft-sand hover:bg-slate-300 dark:hover:bg-slate-200 px-2 rounded transition-colors">Add</button>
                             </div>
@@ -669,7 +671,7 @@ export default function App() {
                   className="flex items-center gap-2 px-2 py-1.5 w-full text-left hover:bg-slate-100 dark:hover:bg-hub-bg/40 rounded-lg transition-colors"
                 >
                   {sectionOpen.projects ? <ChevronDown className="h-3 w-3 text-slate-400" /> : <ChevronRight className="h-3 w-3 text-slate-400" />}
-                  <Layers className="h-3.5 w-3.5 text-blue-600 dark:text-blue-tide" />
+                  <Layers className="h-3.5 w-3.5 text-glow-indigo" />
                   <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Projects</span>
                   <span className="ml-auto text-[10px] bg-slate-100 dark:bg-hub-border text-slate-600 dark:text-slate-400 rounded-full px-1.5 py-0.5 font-mono">{projects.length}</span>
                 </button>
@@ -721,7 +723,7 @@ export default function App() {
                     onClick={() => { setActiveTool(tool.key); setActiveProject(null); setActiveIdea(null); }}
                     className={`flex items-center gap-2 px-7 py-1.5 rounded-lg cursor-pointer transition-colors ${activeTool === tool.key ? 'bg-slate-100 dark:bg-hub-bg text-slate-900 dark:text-slate-200' : 'hover:bg-slate-50 dark:hover:bg-hub-bg/60 text-slate-500 dark:text-slate-400'}`}
                   >
-                    <span className={activeTool === tool.key ? 'text-blue-600 dark:text-blue-tide' : 'text-slate-400 dark:text-slate-500'}>{tool.icon}</span>
+                    <span className={activeTool === tool.key ? 'text-glow-indigo' : 'text-slate-400 dark:text-slate-500'}>{tool.icon}</span>
                     <span className="text-[12px]">{tool.label}</span>
                   </div>
                 ))}
@@ -741,13 +743,13 @@ export default function App() {
 
           {activeTool === 'onboarding' && (
             <div className="bg-white dark:bg-hub-card rounded-xl border border-slate-200 dark:border-hub-border p-5 transition-colors">
-              <h2 className="text-sm font-bold text-slate-800 dark:text-blue-tide uppercase tracking-wider mb-3 pb-2 border-b border-slate-100 dark:border-b-hub-border/60 flex items-center space-x-2">
+              <h2 className="text-sm font-bold text-slate-800 dark:text-slate-400 uppercase tracking-wider mb-3 pb-2 border-b border-slate-100 dark:border-b-hub-border/60 flex items-center space-x-2">
                 <FileDown className="h-4 w-4 text-slate-500 dark:text-slate-400" /><span>Onboarding PDF Generator</span>
               </h2>
               <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed mb-4">Compile decisions, architecture constraints, and active project tasks into a formatted PDF brief for new hires.</p>
               <form onSubmit={handleGeneratePDF} className="space-y-3">
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-600 dark:text-blue-tide mb-1">New Hire Name</label>
+                  <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">New Hire Name</label>
                   <input type="text" placeholder="e.g. Jane Doe" value={pdfHireName} onChange={(e) => setPdfHireName(e.target.value)} className="w-full bg-slate-50 dark:bg-hub-bg text-xs text-slate-800 dark:text-slate-200 px-3 py-2 rounded border border-slate-200 dark:border-hub-border focus:outline-none focus:border-slate-400 dark:focus:border-soft-sand" required />
                 </div>
                 <button type="submit" disabled={isPdfGenerating || !pdfHireName} className="w-full bg-slate-800 dark:bg-soft-sand hover:bg-slate-900 dark:hover:bg-slate-200 text-white dark:text-slate-900 text-xs font-bold py-2 rounded transition-colors disabled:opacity-50 flex items-center justify-center space-x-1.5">
@@ -759,7 +761,7 @@ export default function App() {
 
           {activeTool === 'simulator' && (
             <div className="bg-white dark:bg-hub-card rounded-xl border border-slate-200 dark:border-hub-border p-5 transition-colors">
-              <h2 className="text-sm font-bold text-slate-800 dark:text-blue-tide uppercase tracking-wider mb-3 pb-2 border-b border-slate-100 dark:border-b-hub-border/60 flex items-center space-x-2">
+              <h2 className="text-sm font-bold text-slate-800 dark:text-slate-400 uppercase tracking-wider mb-3 pb-2 border-b border-slate-100 dark:border-b-hub-border/60 flex items-center space-x-2">
                 <Activity className="h-4 w-4 animate-pulse text-slate-500 dark:text-slate-400" /><span>Webhook Simulator</span>
               </h2>
               <div className="grid grid-cols-3 gap-1 mb-4 bg-slate-50 dark:bg-hub-bg p-1 rounded border border-slate-200 dark:border-hub-border">
@@ -774,17 +776,17 @@ export default function App() {
                 {mockSource !== 'github' && (
                   <>
                     <div>
-                      <label className="block text-[10px] font-bold text-slate-600 dark:text-blue-tide mb-1">{mockSource === 'whatsapp' ? 'Phone Number (From)' : 'Sender Username'}</label>
+                      <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 mb-1">{mockSource === 'whatsapp' ? 'Phone Number (From)' : 'Sender Username'}</label>
                       <input type="text" value={mockSender} onChange={(e) => setMockSender(e.target.value)} className="w-full bg-slate-50 dark:bg-hub-bg text-xs text-slate-800 dark:text-slate-200 px-2.5 py-1.5 rounded border border-slate-200 dark:border-hub-border focus:outline-none" required />
                     </div>
                     {mockSource === 'slack' && (
                       <div>
-                        <label className="block text-[10px] font-bold text-slate-600 dark:text-blue-tide mb-1">Slack Channel</label>
+                        <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 mb-1">Slack Channel</label>
                         <input type="text" value={mockChannel} onChange={(e) => setMockChannel(e.target.value)} className="w-full bg-slate-50 dark:bg-hub-bg text-xs text-slate-800 dark:text-slate-200 px-2.5 py-1.5 rounded border border-slate-200 dark:border-hub-border focus:outline-none" required />
                       </div>
                     )}
                     <div>
-                      <label className="block text-[10px] font-bold text-slate-600 dark:text-blue-tide mb-1">Message Content</label>
+                      <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 mb-1">Message Content</label>
                       <textarea value={mockText} onChange={(e) => setMockText(e.target.value)} rows={4} placeholder="Enter chat dialogue..." className="w-full bg-slate-50 dark:bg-hub-bg text-xs text-slate-800 dark:text-slate-200 px-2.5 py-1.5 rounded border border-slate-200 dark:border-hub-border focus:outline-none resize-none" required />
                     </div>
                   </>
@@ -793,16 +795,16 @@ export default function App() {
                   <div className="space-y-2.5">
                     <div className="grid grid-cols-3 gap-2">
                       <div className="col-span-1">
-                        <label className="block text-[10px] font-bold text-slate-600 dark:text-blue-tide mb-1">PR #</label>
+                        <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 mb-1">PR #</label>
                         <input type="number" value={mockGithubNum} onChange={(e) => setMockGithubNum(Number(e.target.value))} className="w-full bg-slate-50 dark:bg-hub-bg text-xs text-slate-800 dark:text-slate-200 px-2.5 py-1.5 rounded border border-slate-200 dark:border-hub-border focus:outline-none" required />
                       </div>
                       <div className="col-span-2">
-                        <label className="block text-[10px] font-bold text-slate-600 dark:text-blue-tide mb-1">PR Title</label>
+                        <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 mb-1">PR Title</label>
                         <input type="text" value={mockGithubTitle} onChange={(e) => setMockGithubTitle(e.target.value)} className="w-full bg-slate-50 dark:bg-hub-bg text-xs text-slate-800 dark:text-slate-200 px-2.5 py-1.5 rounded border border-slate-200 dark:border-hub-border focus:outline-none" required />
                       </div>
                     </div>
                     <div>
-                      <label className="block text-[10px] font-bold text-slate-600 dark:text-blue-tide mb-1">PR Description</label>
+                      <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 mb-1">PR Description</label>
                       <textarea value={mockGithubDesc} onChange={(e) => setMockGithubDesc(e.target.value)} rows={2} className="w-full bg-slate-50 dark:bg-hub-bg text-xs text-slate-800 dark:text-slate-200 px-2.5 py-1.5 rounded border border-slate-200 dark:border-hub-border focus:outline-none resize-none" />
                     </div>
                   </div>
@@ -824,7 +826,7 @@ export default function App() {
                   </div>
                   <div>
                     <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">{activeIdea.title}</h2>
-                    <p className="text-[11px] text-slate-400 dark:text-blue-tide uppercase tracking-wider font-bold">Idea Pane</p>
+                    <p className="text-[11px] text-slate-400 dark:text-slate-400 uppercase tracking-wider font-bold">Idea Pane</p>
                   </div>
                 </div>
                 <button onClick={() => setActiveIdea(null)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-100">
@@ -833,21 +835,21 @@ export default function App() {
               </div>
 
               <div>
-                <h3 className="text-[11px] font-bold text-slate-400 dark:text-blue-tide uppercase tracking-wider mb-2">Description</h3>
+                <h3 className="text-[11px] font-bold text-slate-400 dark:text-slate-400 uppercase tracking-wider mb-2">Description</h3>
                 <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed bg-slate-50 dark:bg-hub-bg/50 rounded-lg border border-slate-200 dark:border-hub-border/40 p-3">
                   {activeIdea.description || 'No description provided.'}
                 </p>
               </div>
 
               <div>
-                <h3 className="text-[11px] font-bold text-slate-400 dark:text-blue-tide uppercase tracking-wider mb-2">Comments</h3>
+                <h3 className="text-[11px] font-bold text-slate-400 dark:text-slate-400 uppercase tracking-wider mb-2">Comments</h3>
                 <div className="flex flex-col gap-2 bg-slate-50 dark:bg-hub-bg/50 rounded-lg border border-slate-200 dark:border-hub-border/40 p-3">
                   {(ideaComments[activeIdea.id]?.length || 0) === 0 && (
                     <p className="text-[11px] text-slate-400 dark:text-slate-600">No comments yet.</p>
                   )}
                   {(ideaComments[activeIdea.id] || []).map((c, idx) => (
                     <div key={idx} className="flex items-start gap-2 text-xs text-slate-700 dark:text-slate-300 bg-white dark:bg-hub-card/60 rounded px-2.5 py-1.5 border border-slate-100 dark:border-0 shadow-sm">
-                      <MessageSquare className="h-3.5 w-3.5 mt-0.5 shrink-0 text-blue-500 dark:text-blue-tide" />
+                      <MessageSquare className="h-3.5 w-3.5 mt-0.5 shrink-0 text-glow-indigo" />
                       <span className="leading-snug">{c}</span>
                     </div>
                   ))}
@@ -858,7 +860,7 @@ export default function App() {
                       onChange={(e) => setIdeaDetailCommentDraft(e.target.value)}
                       onKeyDown={(e) => { if (e.key === 'Enter') addIdeaDetailComment(activeIdea.id); }}
                       placeholder="Add a comment..."
-                      className="flex-1 bg-white dark:bg-hub-bg text-xs text-slate-800 dark:text-slate-200 px-3 py-2 rounded-lg border border-slate-200 dark:border-hub-border focus:outline-none focus:border-blue-500 dark:focus:border-blue-tide"
+                      className="flex-1 bg-white dark:bg-hub-bg text-xs text-slate-800 dark:text-slate-200 px-3 py-2 rounded-lg border border-slate-200 dark:border-hub-border focus:outline-none focus:border-glow-indigo/60 focus:ring-1 focus:ring-glow-indigo/20 transition-all"
                     />
                     <button
                       onClick={() => addIdeaDetailComment(activeIdea.id)}
@@ -933,11 +935,11 @@ export default function App() {
             </div>
             <form onSubmit={handleCreateIdea} className="space-y-4">
               <div>
-                <label className="block text-xs font-bold text-slate-500 dark:text-blue-tide mb-1">Idea Title</label>
+                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">Idea Title</label>
                 <input type="text" placeholder="e.g. Realtime PDF Generator" value={newIdeaTitle} onChange={(e) => setNewIdeaTitle(e.target.value)} className="w-full bg-slate-50 dark:bg-hub-bg text-sm text-slate-800 dark:text-slate-200 px-3 py-2 rounded-lg border border-slate-200 dark:border-hub-border focus:outline-none focus:border-slate-400 dark:focus:border-soft-sand" required autoFocus />
               </div>
               <div>
-                <label className="block text-xs font-bold text-slate-500 dark:text-blue-tide mb-1">Description</label>
+                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">Description</label>
                 <textarea placeholder="Explain the problem it solves..." value={newIdeaDesc} onChange={(e) => setNewIdeaDesc(e.target.value)} rows={4} className="w-full bg-slate-50 dark:bg-hub-bg text-sm text-slate-800 dark:text-slate-200 px-3 py-2 rounded-lg border border-slate-200 dark:border-hub-border focus:outline-none focus:border-slate-400 dark:focus:border-soft-sand resize-none" required />
               </div>
               <div className="flex items-center justify-end space-x-3 pt-2">
@@ -968,11 +970,11 @@ export default function App() {
 
             <form onSubmit={selectedIdeaForProj ? handleConvertProject : handleSaveDeadlineUpdate} className="space-y-4">
               <div>
-                <label className="block text-xs font-bold text-slate-500 dark:text-blue-tide mb-1">Project Owner</label>
+                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">Project Owner</label>
                 <select
                   value={projOwner}
                   onChange={(e) => setProjOwner(e.target.value)}
-                  className="w-full bg-slate-50 dark:bg-hub-bg text-sm text-slate-800 dark:text-slate-200 px-3 py-2 rounded-lg border border-slate-200 dark:border-hub-border focus:outline-none focus:border-slate-400 dark:focus:border-blue-tide"
+                  className="w-full bg-slate-50 dark:bg-hub-bg text-sm text-slate-800 dark:text-slate-200 px-3 py-2 rounded-lg border border-slate-200 dark:border-hub-border focus:outline-none focus:border-slate-400 dark:focus:border-glow-indigo/60"
                   required
                 >
                   <option value="">Select Owner</option>
@@ -982,12 +984,12 @@ export default function App() {
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-bold text-slate-500 dark:text-blue-tide mb-1">Target Calendar Deadline</label>
+                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">Target Calendar Deadline</label>
                 <input 
                   type="date" 
                   value={projDeadline} 
                   onChange={(e) => setProjDeadline(e.target.value)} 
-                  className="w-full bg-slate-50 dark:bg-hub-bg text-sm text-slate-800 dark:text-slate-200 px-3 py-2 rounded-lg border border-slate-200 dark:border-hub-border focus:outline-none focus:border-slate-400 dark:focus:border-blue-tide font-mono" 
+                  className="w-full bg-slate-50 dark:bg-hub-bg text-sm text-slate-800 dark:text-slate-200 px-3 py-2 rounded-lg border border-slate-200 dark:border-hub-border focus:outline-none focus:border-slate-400 dark:focus:border-glow-indigo/60 font-mono" 
                   required 
                 />
               </div>
@@ -997,7 +999,7 @@ export default function App() {
               </div>
               <div className="flex items-center justify-end space-x-3 pt-2">
                 <button type="button" onClick={() => setIsProjectModalOpen(false)} className="px-4 py-2 bg-slate-50 dark:bg-hub-bg hover:bg-slate-100 dark:hover:bg-hub-border text-slate-500 dark:text-slate-400 text-xs font-bold rounded-lg border border-slate-200 dark:border-hub-border">Cancel</button>
-                <button type="submit" className="px-4 py-2 bg-slate-800 dark:bg-blue-tide text-white dark:text-slate-950 text-xs font-bold rounded-lg hover:bg-slate-900 dark:hover:bg-slate-200 transition-colors shadow-sm">Apply Matrix Changes</button>
+                <button type="submit" className="px-4 py-2 bg-slate-800 dark:bg-glow-indigo text-white dark:text-slate-950 text-xs font-bold rounded-lg hover:bg-slate-900 dark:hover:bg-slate-200 transition-colors shadow-sm">Apply Matrix Changes</button>
               </div>
             </form>
           </div>
@@ -1015,23 +1017,23 @@ export default function App() {
             </div>
             <form onSubmit={handleCreateTask} className="space-y-4">
               <div>
-                <label className="block text-xs font-bold text-slate-500 dark:text-blue-tide mb-1">Task Title</label>
+                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">Task Title</label>
                 <input
                   type="text"
                   placeholder="e.g. Implement refresh-token rotation"
                   value={newTaskTitle}
                   onChange={(e) => setNewTaskTitle(e.target.value)}
-                  className="w-full bg-slate-50 dark:bg-hub-bg text-sm text-slate-800 dark:text-slate-200 px-3 py-2 rounded-lg border border-slate-200 dark:border-hub-border focus:outline-none focus:border-slate-400 dark:focus:border-blue-tide"
+                  className="w-full bg-slate-50 dark:bg-hub-bg text-sm text-slate-800 dark:text-slate-200 px-3 py-2 rounded-lg border border-slate-200 dark:border-hub-border focus:outline-none focus:border-slate-400 dark:focus:border-glow-indigo/60"
                   required
                   autoFocus
                 />
               </div>
               <div>
-                <label className="block text-xs font-bold text-slate-500 dark:text-blue-tide mb-1">Assignee</label>
+                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">Assignee</label>
                 <select
                   value={newTaskAssignedTo}
                   onChange={(e) => setNewTaskAssignedTo(e.target.value)}
-                  className="w-full bg-slate-50 dark:bg-hub-bg text-sm text-slate-800 dark:text-slate-200 px-3 py-2 rounded-lg border border-slate-200 dark:border-hub-border focus:outline-none focus:border-slate-400 dark:focus:border-blue-tide"
+                  className="w-full bg-slate-50 dark:bg-hub-bg text-sm text-slate-800 dark:text-slate-200 px-3 py-2 rounded-lg border border-slate-200 dark:border-hub-border focus:outline-none focus:border-slate-400 dark:focus:border-glow-indigo/60"
                 >
                   <option value="">Unassigned</option>
                   {workspaceUsers.map(u => (
@@ -1041,7 +1043,7 @@ export default function App() {
               </div>
               <div className="flex items-center justify-end space-x-3 pt-2">
                 <button type="button" onClick={() => setIsTaskModalOpen(false)} className="px-4 py-2 bg-slate-50 dark:bg-hub-bg hover:bg-slate-100 dark:hover:bg-hub-border text-slate-500 dark:text-slate-400 text-xs font-bold rounded-lg border border-slate-200 dark:border-hub-border">Cancel</button>
-                <button type="submit" className="px-4 py-2 bg-slate-800 dark:bg-blue-tide text-white dark:text-slate-950 text-xs font-bold rounded-lg hover:bg-slate-900 dark:hover:bg-slate-200 transition-colors shadow-sm">Save Task</button>
+                <button type="submit" className="px-4 py-2 bg-slate-800 dark:bg-glow-indigo text-white dark:text-slate-950 text-xs font-bold rounded-lg hover:bg-slate-900 dark:hover:bg-slate-200 transition-colors shadow-sm">Save Task</button>
               </div>
             </form>
           </div>

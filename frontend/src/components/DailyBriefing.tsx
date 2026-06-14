@@ -11,10 +11,10 @@ interface BriefingData {
 }
 
 const ICON_MAP = {
-  decision: <Zap className="h-3.5 w-3.5 text-[#DCCCB4] shrink-0 mt-0.5" />,
-  blocker: <AlertTriangle className="h-3.5 w-3.5 text-amber-400 shrink-0 mt-0.5" />,
-  action: <CheckSquare className="h-3.5 w-3.5 text-emerald-400 shrink-0 mt-0.5" />,
-  idea: <Lightbulb className="h-3.5 w-3.5 text-sky-400 shrink-0 mt-0.5" />,
+  decision: <Zap className="h-3.5 w-3.5 text-glow-indigo shrink-0 mt-0.5" />,
+  blocker: <AlertTriangle className="h-3.5 w-3.5 text-amber-600 dark:text-amber-500 shrink-0 mt-0.5 animate-pulse" />,
+  action: <CheckSquare className="h-3.5 w-3.5 text-cyber-cyan shrink-0 mt-0.5" />,
+  idea: <Lightbulb className="h-3.5 w-3.5 text-neon-violet shrink-0 mt-0.5" />,
 };
 
 interface DailyBriefingProps {
@@ -62,81 +62,83 @@ export function DailyBriefing({ workspaceId }: DailyBriefingProps) {
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
 
   return (
-    <div className="bg-hub-card rounded-xl border border-hub-border p-4 flex flex-col gap-3">
+    <div className="bg-white/85 dark:bg-hub-card/45 backdrop-blur-md border border-slate-200/60 dark:border-hub-border/60 rounded-2xl p-5 flex flex-col gap-3.5 shadow-sm shadow-slate-200/20 dark:shadow-none">
       {/* Header */}
-      <div className="flex items-center justify-between pb-2 border-b border-hub-border/60">
-        <h2 className="text-sm font-bold text-blue-tide uppercase tracking-wider flex items-center gap-2">
-          <Sunrise className="h-4 w-4" />
+      <div className="flex items-center justify-between pb-2.5 border-b border-slate-200 dark:border-hub-border/40">
+        <h2 className="text-sm font-extrabold text-slate-800 dark:text-slate-200 uppercase tracking-wider flex items-center gap-2">
+          <Sunrise className="h-4.5 w-4.5 text-glow-indigo animate-pulse" />
           <span>AI Daily Briefing</span>
         </h2>
         <button
           onClick={generate}
           disabled={loading}
-          className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-soft-sand bg-driftwood/20 border border-driftwood/30 hover:bg-driftwood/30 px-2.5 py-1 rounded-lg transition-all disabled:opacity-50"
+          className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-400 bg-slate-100/60 dark:bg-[#070a13]/40 border border-slate-200 dark:border-hub-border/60 hover:bg-slate-200/60 dark:hover:bg-[#070a13]/70 px-3 py-1.5 rounded-xl transition-all disabled:opacity-50 active:scale-95 shadow-sm shadow-slate-100/30 dark:shadow-none"
         >
-          <RefreshCw className={`h-3 w-3 ${loading ? 'animate-spin' : ''}`} />
+          <RefreshCw className={`h-3 w-3 ${loading ? 'animate-spin text-glow-indigo' : ''}`} />
           {loading ? 'Generating...' : briefing ? 'Refresh' : 'Generate'}
         </button>
       </div>
 
       {/* Empty state */}
       {!briefing && !loading && !error && (
-        <div className="flex flex-col items-center justify-center py-6 text-slate-500 text-center gap-2">
-          <Sunrise className="h-8 w-8 opacity-30" />
-          <p className="text-xs">{greeting}! Hit Generate for your AI briefing.</p>
-          <p className="text-[10px] text-slate-600">Claude will summarize decisions, blockers & priorities.</p>
+        <div className="flex flex-col items-center justify-center py-8 text-center gap-2.5">
+          <Sunrise className="h-10 w-10 text-glow-indigo/35 opacity-40 animate-pulse" />
+          <p className="text-xs font-bold text-slate-600 dark:text-slate-400">{greeting}! Hit Generate for your AI briefing.</p>
+          <p className="text-[10px] text-slate-400 dark:text-slate-500 max-w-[240px]">Claude will analyze workspace activity to construct priorities, decisions & blockers.</p>
         </div>
       )}
 
       {/* Loading shimmer */}
       {loading && (
-        <div className="space-y-2 animate-pulse py-2">
-          <div className="h-3 bg-hub-border rounded w-3/4"></div>
-          <div className="h-3 bg-hub-border rounded w-full"></div>
-          <div className="h-3 bg-hub-border rounded w-5/6"></div>
-          <div className="h-3 bg-hub-border rounded w-2/3 mt-3"></div>
-          <div className="h-3 bg-hub-border rounded w-full"></div>
+        <div className="space-y-2.5 animate-pulse py-2">
+          <div className="h-3 bg-slate-200/60 dark:bg-hub-border/40 rounded-full w-3/4"></div>
+          <div className="h-3 bg-slate-200/60 dark:bg-hub-border/40 rounded-full w-full"></div>
+          <div className="h-3 bg-slate-200/60 dark:bg-hub-border/40 rounded-full w-5/6"></div>
+          <div className="h-3 bg-slate-200/60 dark:bg-hub-border/40 rounded-full w-2/3 mt-4"></div>
+          <div className="h-3 bg-slate-200/60 dark:bg-hub-border/40 rounded-full w-full"></div>
         </div>
       )}
 
       {/* Error */}
       {error && (
-        <div className="text-xs text-rose-400 bg-rose-950/30 border border-rose-900 rounded p-3">
+        <div className="text-xs text-rose-600 dark:text-rose-400 bg-rose-50/50 dark:bg-rose-950/20 border border-rose-200/40 dark:border-rose-900/30 rounded-xl p-4 shadow-sm">
           {error}
         </div>
       )}
 
       {/* Briefing content */}
       {briefing && !loading && (
-        <div className="space-y-3">
+        <div className="space-y-3.5">
           {/* Greeting */}
-          <p className="text-xs font-semibold text-soft-sand">{briefing.greeting}</p>
+          <p className="text-xs font-bold text-slate-700 dark:text-slate-200">{briefing.greeting}</p>
 
           {/* Summary with typewriter */}
-          <div className="text-sm text-slate-300 leading-relaxed bg-hub-bg/50 rounded-lg border border-hub-border/40 p-3 min-h-[60px]">
-          {typed.split('\n').filter(Boolean).map((line, i) => (
-          <p key={i} className="mb-1">{line}</p>
-          ))}
-          {!typewriterDone && (
-           <span className="inline-block w-0.5 h-4 bg-soft-sand ml-0.5 animate-pulse align-middle" />
-           )}
+          <div className="text-xs leading-relaxed text-slate-700 dark:text-slate-400 bg-slate-50/60 dark:bg-[#070a13]/30 rounded-xl border border-slate-200/60 dark:border-hub-border/40 p-4 min-h-[70px] shadow-inner font-sans">
+            {typed.split('\n').filter(Boolean).map((line, i) => (
+              <p key={i} className="mb-1">{line}</p>
+            ))}
+            {!typewriterDone && (
+              <span className="inline-block w-0.5 h-3.5 bg-glow-indigo ml-0.5 animate-pulse align-middle" />
+            )}
           </div>
 
           {/* Highlights */}
           {briefing.highlights.length > 0 && typewriterDone && (
-            <div className="space-y-2 pt-1 border-t border-hub-border/40">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-blue-tide">Key Points</p>
-              {briefing.highlights.map((h, i) => (
-                <div key={i} className="flex items-start gap-2 text-xs text-slate-300">
-                  {ICON_MAP[h.icon]}
-                  <span className="leading-snug">{h.text}</span>
-                </div>
-              ))}
+            <div className="space-y-2.5 pt-3 border-t border-slate-200 dark:border-hub-border/40">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-glow-indigo">Key Points</p>
+              <div className="space-y-2">
+                {briefing.highlights.map((h, i) => (
+                  <div key={i} className="flex items-start gap-2.5 text-xs text-slate-700 dark:text-slate-300 bg-slate-50/30 dark:bg-[#070a13]/10 p-2.5 rounded-xl border border-slate-200/40 dark:border-hub-border/20 hover:-translate-x-0.5 transition-all duration-150">
+                    {ICON_MAP[h.icon]}
+                    <span className="leading-snug">{h.text}</span>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 
           {/* Timestamp */}
-          <p className="text-[9px] text-slate-600 text-right">
+          <p className="text-[9px] text-slate-400 dark:text-slate-600 text-right mt-1.5">
             Generated at {new Date(briefing.generatedAt).toLocaleTimeString()}
           </p>
         </div>
