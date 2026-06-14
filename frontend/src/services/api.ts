@@ -8,17 +8,73 @@ export interface SearchResult {
   details: any;
 }
 
+const getHeaders = (extraHeaders: Record<string, string> = {}) => {
+  const headers: Record<string, string> = { ...extraHeaders };
+  const token = localStorage.getItem('sh-auth-token');
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  return headers;
+};
+
 export const api = {
+  // Auth API Methods
+  register: async (email: string, password: string) => {
+    const res = await fetch(`${BACKEND_URL}/api/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password })
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Registration failed');
+    }
+    return res.json();
+  },
+
+  login: async (email: string, password: string) => {
+    const res = await fetch(`${BACKEND_URL}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password })
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Login failed');
+    }
+    return res.json();
+  },
+
+  getCurrentUser: async () => {
+    const res = await fetch(`${BACKEND_URL}/api/auth/me`, {
+      headers: getHeaders()
+    });
+    if (!res.ok) throw new Error('Unauthenticated');
+    return res.json();
+  },
+
+  getUsers: async (workspaceId: string = '00000000-0000-0000-0000-000000000000') => {
+    const res = await fetch(`${BACKEND_URL}/api/users?workspaceId=${workspaceId}`, {
+      headers: getHeaders()
+    });
+    if (!res.ok) throw new Error('Failed to fetch workspace users');
+    return res.json();
+  },
+
   // 1. Get Dashboard (in case we need to pull manually)
   getDashboard: async (workspaceId: string = '00000000-0000-0000-0000-000000000000') => {
-    const res = await fetch(`${BACKEND_URL}/api/dashboard?workspaceId=${workspaceId}`);
+    const res = await fetch(`${BACKEND_URL}/api/dashboard?workspaceId=${workspaceId}`, {
+      headers: getHeaders()
+    });
     if (!res.ok) throw new Error('Failed to fetch dashboard data');
     return res.json();
   },
 
   // 2. Search query
   search: async (query: string, workspaceId: string = '00000000-0000-0000-0000-000000000000'): Promise<SearchResult[]> => {
-    const res = await fetch(`${BACKEND_URL}/api/search?q=${encodeURIComponent(query)}&workspaceId=${workspaceId}`);
+    const res = await fetch(`${BACKEND_URL}/api/search?q=${encodeURIComponent(query)}&workspaceId=${workspaceId}`, {
+      headers: getHeaders()
+    });
     if (!res.ok) throw new Error('Search failed');
     const data = await res.json();
     return data.results || [];
@@ -28,7 +84,7 @@ export const api = {
   createIdea: async (title: string, description: string, workspaceId: string = '00000000-0000-0000-0000-000000000000') => {
     const res = await fetch(`${BACKEND_URL}/api/ideas`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ title, description, workspaceId, source: 'slack' })
     });
     if (!res.ok) throw new Error('Failed to create idea');
@@ -39,7 +95,7 @@ export const api = {
   convertIdeaToProject: async (ideaId: string, owner: string, deadline: string, workspaceId: string = '00000000-0000-0000-0000-000000000000') => {
     const res = await fetch(`${BACKEND_URL}/api/projects/from-idea/${ideaId}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ owner, deadline, workspaceId })
     });
     if (!res.ok) throw new Error('Failed to convert idea to project');
@@ -50,10 +106,13 @@ export const api = {
   updateTaskStatus: async (taskId: string, status: string, workspaceId: string = '00000000-0000-0000-0000-000000000000') => {
     const res = await fetch(`${BACKEND_URL}/api/tasks/${taskId}/status`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ status, workspaceId })
     });
-    if (!res.ok) throw new Error('Failed to update task status');
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to update task status');
+    }
     return res.json();
   },
 
@@ -61,7 +120,7 @@ export const api = {
   generatePDF: async (newHireName: string, workspaceId: string = '00000000-0000-0000-0000-000000000000') => {
     const res = await fetch(`${BACKEND_URL}/api/pdf/generate`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ newHireName, workspaceId })
     });
     if (!res.ok) throw new Error('Failed to generate onboarding PDF');
@@ -80,7 +139,7 @@ export const api = {
   simulateWhatsApp: async (text: string, sender: string, workspaceId: string = '00000000-0000-0000-0000-000000000000') => {
     const res = await fetch(`${BACKEND_URL}/webhooks/whatsapp`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ Body: text, From: sender, workspaceId })
     });
     if (!res.ok) throw new Error('Simulating WhatsApp webhook failed');
@@ -90,7 +149,7 @@ export const api = {
   simulateSlack: async (text: string, sender: string, channel: string, workspaceId: string = '00000000-0000-0000-0000-000000000000') => {
     const res = await fetch(`${BACKEND_URL}/webhooks/slack`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ text, sender, channel, workspaceId })
     });
     if (!res.ok) throw new Error('Simulating Slack webhook failed');
@@ -100,7 +159,7 @@ export const api = {
   simulateGitHub: async (prNumber: number, title: string, description: string, workspaceId: string = '00000000-0000-0000-0000-000000000000') => {
     const res = await fetch(`${BACKEND_URL}/webhooks/github`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ pr_number: prNumber, title, description, workspaceId })
     });
     if (!res.ok) throw new Error('Simulating GitHub webhook failed');
@@ -108,12 +167,40 @@ export const api = {
   },
 
   updateActionItemStatus: async (itemId: string, status: 'pending' | 'completed', workspaceId: string = '00000000-0000-0000-0000-000000000000') => {
-  const res = await fetch(`${BACKEND_URL}/api/action-items/${itemId}/status`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ status, workspaceId })
-  });
-  if (!res.ok) throw new Error('Failed to update action item status');
-  return res.json();
-}
+    const res = await fetch(`${BACKEND_URL}/api/action-items/${itemId}/status`, {
+      method: 'POST',
+      headers: getHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ status, workspaceId })
+    });
+    if (!res.ok) throw new Error('Failed to update action item status');
+    return res.json();
+  },
+
+  // Add Task API Method
+  createTask: async (projectId: string, title: string, assignedTo: string, workspaceId: string = '00000000-0000-0000-0000-000000000000') => {
+    const res = await fetch(`${BACKEND_URL}/api/tasks`, {
+      method: 'POST',
+      headers: getHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ projectId, title, assignedTo, workspaceId })
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to create task');
+    }
+    return res.json();
+  },
+
+  // Project Settings Update API Method
+  updateProjectSettings: async (projectId: string, settings: { owner?: string; deadline?: string; title?: string; description?: string; status?: string }, workspaceId: string = '00000000-0000-0000-0000-000000000000') => {
+    const res = await fetch(`${BACKEND_URL}/api/projects/${projectId}/settings`, {
+      method: 'POST',
+      headers: getHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ ...settings, workspaceId })
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to update project settings');
+    }
+    return res.json();
+  }
 };

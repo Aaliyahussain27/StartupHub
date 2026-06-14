@@ -3,6 +3,7 @@ import {
   Folder, Plus, Sparkles, AlertTriangle, Check, ListChecks, Lock, 
   Clock, CheckCircle, Circle, Ban, X, ChevronDown, ChevronRight, MessageSquare 
 } from 'lucide-react';
+import { api } from '../services/api';
 
 interface Comment {
   initials: string;
@@ -46,69 +47,6 @@ const PILL: Record<string, string> = {
   muted:  'bg-slate-800 text-slate-400',
 };
 
-const MODALS: Record<string, ModalData> = {
-  blockers: {
-    label: 'Blockers',
-    items: [
-      {
-        id: 'b1', icon: 'blocker', title: 'API auth not resolved', meta: 'Assigned to Arjun · Flagged Jun 9',
-        body: 'The OAuth2 token exchange with the Slack API is failing intermittently.',
-        status: 'blocked', statusType: 'warn', assignedTo: 'Arjun',
-        rootCause: 'Missing refresh-token rotation handler inside the local token store; configurations reset on server restart.',
-        resolution: 'Persist refresh tokens securely via PostgreSQL database layer and refresh server storage hooks.',
-        comments: [
-          { initials: 'AR', author: 'Arjun', time: 'Jun 9, 4:12 PM', text: 'Traced it to the token store — refresh tokens aren\'t being persisted between restarts. Will fix in next PR.' }
-        ],
-      },
-      {
-        id: 'b2', icon: 'blocker', title: 'Design sign-off pending', meta: 'Assigned to Meera · Flagged Jun 11',
-        body: 'The project dashboard UI needs sign-off from the design lead before frontend tasks can proceed.',
-        status: 'blocked', statusType: 'warn', assignedTo: 'Meera',
-        rootCause: 'Figma mockups are awaiting architectural layout approval from executive leadership teams.',
-        resolution: 'Escalate to an async Loom walkthrough sequence directly broadcasted to client communication channels by EOD.',
-        comments: [],
-      }
-    ],
-  },
-  decisions: {
-    label: 'Decisions',
-    items: [
-      {
-        id: 'd1', icon: 'decision', title: 'Use PostgreSQL for graph store', meta: 'Decided by Arjun · Jun 6',
-        body: 'Evaluated Neo4j and PostgreSQL with recursive CTEs. PostgreSQL chosen to keep infrastructure simple.',
-        status: 'decided', statusType: 'info',
-        comments: []
-      }
-    ],
-  },
-  tasks: {
-    label: 'Active tasks',
-    items: [
-      {
-        id: 't1', icon: 'inprogress', title: 'Build dependency graph engine', meta: 'Assigned to Arjun · Started Jun 10',
-        body: 'DFS cycle detection written and tested. Topological sort and blocker cascade propagation in review.',
-        status: 'in progress', statusType: 'info', assignedTo: 'Arjun',
-        subtasks: [
-          { id: 'st1', title: 'Implement core DFS cycle detection matrix logic', isDone: true },
-          { id: 'st2', title: 'Write structured unit tests for recursive cascade propagation loops', isDone: false },
-          { id: 'st3', title: 'Expose live backend topological sort objects directly to React state handlers', isDone: false }
-        ],
-        comments: []
-      },
-      {
-        id: 't2', icon: 'blocked', title: 'Integrate Slack webhooks', meta: 'Assigned to Meera · Blocked by: API auth',
-        body: 'Blocked on local API authorization layer. Cannot proceed until upstream token exchange engine acts functional.',
-        status: 'blocked', statusType: 'danger', assignedTo: 'Meera',
-        subtasks: [
-          { id: 'st4', title: 'Configure secure payload router endpoint parameters', isDone: true },
-          { id: 'st5', title: 'Map payload parsing properties schemas securely', isDone: false }
-        ],
-        comments: []
-      }
-    ],
-  },
-};
-
 function ItemIcon({ icon }: { icon: DetailItem['icon'] }) {
   if (icon === 'blocker')    return <Lock    className="h-4 w-4 text-amber-400 shrink-0" />;
   if (icon === 'decision')   return <Check   className="h-4 w-4 text-blue-400 shrink-0" />;
@@ -123,6 +61,8 @@ interface ProjectWorkspaceProps {
   blockers?: any[];
   tasks?: any[];
   projects?: any[];
+  users?: any[];
+  currentUser?: any;
   onAddDeadlineClick?: () => void;
   onAddTaskClick?: () => void;
 }
@@ -132,12 +72,13 @@ export function ProjectWorkspace({
   blockers = [], 
   tasks = [], 
   projects = [],
+  currentUser,
   onAddDeadlineClick,
   onAddTaskClick 
 }: ProjectWorkspaceProps) {
-    const [modal, setModal] = useState<string | null>(null);
-    const [localDeadline, setLocalDeadline] = useState<string>('');
-    const [deadlineEditing, setDeadlineEditing] = useState(false);
+  const [modal, setModal] = useState<string | null>(null);
+  const [localDeadline, setLocalDeadline] = useState<string>('');
+  const [deadlineEditing, setDeadlineEditing] = useState(false);
   
   // Workspace UI collapse & comment state management dictionaries
   const [expandedItems, setExpandedItems] = useState<Record<string, boolean>>({});
@@ -160,27 +101,91 @@ export function ProjectWorkspace({
     return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
   };
 
-  const getDaysRemaining = (deadlineDateStr?: string) => {
-    if (!deadlineDateStr || deadlineDateStr.toLowerCase() === 'friday') {
-      return { text: 'Friday', subtitle: 'Stays until deadline target dates set' };
-    }
-    const target = new Date(deadlineDateStr);
-    const today = new Date();
-    today.setHours(0,0,0,0);
-    target.setHours(0,0,0,0);
-    
-    const diffTime = target.getTime() - today.getTime();
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    
-    if (diffDays < 0) return { text: 'Overdue', subtitle: `${Math.abs(diffDays)} days past set target` };
-    if (diffDays === 0) return { text: 'Due Today', subtitle: 'Stays until deadline sequence expires' };
-    return { text: `${diffDays} days left`, subtitle: 'stays until deadline' };
-  };
-
-  const projectInstance = projects[0] || { title: 'StartupHub Core', status: 'active', activeSince: '2026-06-10', deadline: '' };
+  const projectInstance = projects[0] || { id: 'p1', title: 'StartupHub Core', status: 'active', activeSince: '2026-06-10', deadline: '', owner: 'Ovee' };
+  
   // Sync deadline from project data on first load
   useState(() => { if (projectInstance.deadline && !localDeadline) setLocalDeadline(projectInstance.deadline); });
-  const deadlineMetrics = getDaysRemaining(projectInstance.deadline);
+
+  // Dynamically build blockers, decisions, and tasks list mapping to DetailItem schema
+  const activeBlockersList: DetailItem[] = blockers.map((b: any, index: number) => {
+    const taskObj = tasks.find(t => t.id === b.taskId);
+    return {
+      id: b.taskId || `block-${index}`,
+      icon: 'blocker',
+      title: taskObj ? `Task Blocked: ${taskObj.title}` : 'Dependency Blocker',
+      meta: taskObj ? `Assigned to ${taskObj.assigned_to} · Flagged ${new Date(taskObj.updated_at || Date.now()).toLocaleDateString()}` : 'System detected blocker',
+      body: b.reason || 'Circular dependency or missing requirements preventing progress.',
+      status: 'blocked',
+      statusType: 'warn',
+      assignedTo: taskObj ? taskObj.assigned_to : 'Unassigned',
+      rootCause: b.reason,
+      resolution: 'Resolve the blocked dependencies or cycle to continue.',
+      comments: []
+    };
+  });
+
+  const activeDecisionsList: DetailItem[] = decisions.map((d: any, index: number) => {
+    return {
+      id: d.id || `dec-${index}`,
+      icon: 'decision',
+      title: d.decision_text || 'Decision Logged',
+      meta: `Logged on ${new Date(d.created_at || Date.now()).toLocaleDateString()}`,
+      body: 'This decision was programmatically extracted from team communications.',
+      status: 'decided',
+      statusType: 'info',
+      comments: []
+    };
+  });
+
+  const activeTasksList: DetailItem[] = tasks.map((t: any) => {
+    let statusType: DetailItem['statusType'] = 'muted';
+    let icon: DetailItem['icon'] = 'todo';
+    if (t.status === 'done') {
+      statusType = 'ok';
+      icon = 'done';
+    } else if (t.status === 'in_progress') {
+      statusType = 'info';
+      icon = 'inprogress';
+    } else if (t.status === 'blocked') {
+      statusType = 'danger';
+      icon = 'blocked';
+    }
+    
+    const depsText = (t.dependencies && t.dependencies.length > 0)
+      ? 'Blocked by: ' + t.dependencies.map((dId: string) => {
+          const depTask = tasks.find(tsk => tsk.id === dId);
+          return depTask ? `"${depTask.title}"` : dId;
+        }).join(', ')
+      : `Assigned to ${t.assigned_to}`;
+
+    return {
+      id: t.id,
+      icon,
+      title: t.title,
+      meta: depsText,
+      body: `Status: ${t.status}. Last updated: ${new Date(t.updated_at || Date.now()).toLocaleString()}`,
+      status: t.status,
+      statusType,
+      assignedTo: t.assigned_to,
+      subtasks: [],
+      comments: []
+    };
+  });
+
+  const dynamicModals: Record<string, ModalData> = {
+    blockers: {
+      label: 'Blockers',
+      items: activeBlockersList
+    },
+    decisions: {
+      label: 'Decisions',
+      items: activeDecisionsList
+    },
+    tasks: {
+      label: 'Active tasks',
+      items: activeTasksList
+    }
+  };
 
   return (
     <div className="flex flex-col h-full bg-hub-bg relative">
@@ -234,7 +239,7 @@ export function ProjectWorkspace({
             <div className="flex items-center justify-between mb-1">
               <p className="text-[10px] text-slate-500 uppercase tracking-wide">Deadline</p>
               <button
-                onClick={() => setDeadlineEditing(true)}
+                onClick={onAddDeadlineClick}
                 className="text-[9px] text-blue-tide hover:text-blue-300 underline"
               >
                 {localDeadline ? 'Edit' : 'Set date'}
@@ -245,7 +250,15 @@ export function ProjectWorkspace({
                 type="date"
                 autoFocus
                 defaultValue={localDeadline}
-                onBlur={(e) => { setLocalDeadline(e.target.value); setDeadlineEditing(false); }}
+                onBlur={async (e) => { 
+                  setLocalDeadline(e.target.value); 
+                  setDeadlineEditing(false);
+                  try {
+                    await api.updateProjectSettings(projectInstance.id, { deadline: e.target.value }, '00000000-0000-0000-0000-000000000000');
+                  } catch (err: any) {
+                    alert(err.message || 'Failed to update project settings');
+                  }
+                }}
                 onChange={(e) => setLocalDeadline(e.target.value)}
                 className="w-full bg-hub-bg text-xs text-slate-200 px-2 py-1 rounded border border-hub-border focus:outline-none focus:border-amber-500/50 mt-1"
               />
@@ -289,13 +302,16 @@ export function ProjectWorkspace({
               </div>
               <span className="text-[10px] text-slate-600">click to expand</span>
             </div>
-            {MODALS.blockers.items.map((item, i) => (
+            {activeBlockersList.slice(0, 3).map((item, i) => (
               <div key={i} className="flex items-center gap-2 py-1.5 border-t border-white/5 first:border-0 text-xs text-slate-300">
                 <Lock className="h-3.5 w-3.5 text-amber-400 shrink-0" />
                 <span className="flex-1 truncate">{item.title}</span>
                 <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-900/30 text-amber-400">blocked</span>
               </div>
             ))}
+            {activeBlockersList.length === 0 && (
+              <p className="text-xs text-slate-500 py-2">No active blockers flagged.</p>
+            )}
           </div>
 
           <div onClick={() => setModal('decisions')} className="bg-hub-card border border-hub-border rounded-xl p-4 cursor-pointer hover:border-white/20 transition-colors">
@@ -305,13 +321,16 @@ export function ProjectWorkspace({
               </div>
               <span className="text-[10px] text-slate-600">click to expand</span>
             </div>
-            {MODALS.decisions.items.map((d, i) => (
+            {activeDecisionsList.slice(0, 3).map((d, i) => (
               <div key={i} className="flex items-center gap-2 py-1.5 border-t border-white/5 first:border-0 text-xs text-slate-300">
                 <Check className="h-3.5 w-3.5 text-blue-400 shrink-0" />
                 <span className="flex-1 truncate">{d.title}</span>
                 <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-900/30 text-blue-400">decided</span>
               </div>
             ))}
+            {activeDecisionsList.length === 0 && (
+              <p className="text-xs text-slate-500 py-2">No decisions logged yet.</p>
+            )}
           </div>
         </div>
 
@@ -323,13 +342,16 @@ export function ProjectWorkspace({
             </div>
             <span className="text-[10px] text-slate-600">click to expand</span>
           </div>
-          {MODALS.tasks.items.map((t, i) => (
+          {activeTasksList.slice(0, 5).map((t, i) => (
             <div key={i} className="flex items-center gap-2 py-1.5 border-t border-white/5 first:border-0 text-xs text-slate-300">
-              <Ban className="h-3.5 w-3.5 text-rose-400 shrink-0" />
+              <ItemIcon icon={t.icon} />
               <span className="flex-1 truncate">{t.title}</span>
               <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-900/30 text-blue-400">{t.status}</span>
             </div>
           ))}
+          {activeTasksList.length === 0 && (
+            <p className="text-xs text-slate-500 py-2">No active tasks in this project.</p>
+          )}
         </div>
       </div>
 
@@ -341,7 +363,7 @@ export function ProjectWorkspace({
             {/* Modal Header Controls Toolbar */}
             <div className="flex items-center justify-between px-5 py-3 border-b border-hub-border shrink-0">
               <div>
-                <p className="text-sm font-bold text-slate-200 uppercase tracking-wider">{MODALS[modal]?.label || modal}</p>
+                <p className="text-sm font-bold text-slate-200 uppercase tracking-wider">{dynamicModals[modal]?.label || modal}</p>
                 <p className="text-[11px] text-slate-500">Toggle rows below to audit structural components, assignees, and details</p>
               </div>
               <button onClick={() => setModal(null)} className="text-slate-500 hover:text-slate-300 p-1">
@@ -361,7 +383,7 @@ export function ProjectWorkspace({
 
             {/* Render Context List Loop Elements */}
             <div className="overflow-y-auto p-5 flex flex-col gap-3">
-              {MODALS[modal]?.items.map((item) => {
+              {(dynamicModals[modal]?.items || []).map((item) => {
                 const isExpanded = !!expandedItems[item.id];
                 const showCommentField = !!activeCommentBox[item.id];
 
@@ -370,11 +392,7 @@ export function ProjectWorkspace({
                     
                     {/* Primary Clickable Header Interaction Zone */}
                     <div className="p-4 flex items-center gap-3 cursor-pointer select-none" onClick={() => toggleItemExpansion(item.id)}>
-                      {item.subtasks && item.subtasks.length > 0 ? (
-                        isExpanded ? <ChevronDown className="h-4 w-4 text-slate-400 shrink-0" /> : <ChevronRight className="h-4 w-4 text-slate-400 shrink-0" />
-                      ) : (
-                        <div className="w-4" />
-                      )}
+                      {isExpanded ? <ChevronDown className="h-4 w-4 text-slate-400 shrink-0" /> : <ChevronRight className="h-4 w-4 text-slate-400 shrink-0" />}
                       <ItemIcon icon={item.icon} />
                       <div className="flex-1 min-w-0">
                         <p className="text-xs font-semibold text-slate-200 truncate">{item.title}</p>
@@ -384,7 +402,7 @@ export function ProjectWorkspace({
                     </div>
 
                     {/* Interactive Substructure Extension Dropdown View */}
-                    {(isExpanded || !item.subtasks) && (
+                    {isExpanded && (
                       <div className="px-4 pb-4 pt-1 border-t border-white/5 bg-black/5 text-xs text-slate-400 space-y-3">
                         <p className="leading-relaxed text-slate-300 mt-2">{item.body}</p>
 
@@ -400,37 +418,27 @@ export function ProjectWorkspace({
                           </div>
                         )}
 
-                        {/* Subtasks Tree Checklist Container Component Block */}
-                        {item.subtasks && item.subtasks.length > 0 && (
-                          <div className="space-y-1.5 my-2 pt-2 border-t border-white/5">
-                            <p className="text-[10px] font-bold uppercase text-blue-tide tracking-wider mb-1">Subtasks Breakdown & Ownership Tree</p>
-                            {item.subtasks.map((sub) => (
-                              <div key={sub.id} className="flex items-center gap-2 pl-2 py-0.5 text-[11px]">
-                                {sub.isDone ? (
-                                  <CheckCircle className="h-3 w-3 text-emerald-400 shrink-0" />
-                                ) : (
-                                  <Circle className="h-3 w-3 text-slate-600 shrink-0" />
-                                )}
-                                <span className={sub.isDone ? 'line-through text-slate-600' : 'text-slate-300'}>
-                                  {sub.title} — <span className="text-slate-500">Assigned to: {item.assignedTo || 'Unassigned'}</span>
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-
-                        {/* Comments Log Pipeline */}
-                        {item.comments && item.comments.length > 0 && (
-                          <div className="space-y-2 pt-2 border-t border-white/5">
-                            {item.comments.map((c, idx) => (
-                              <div key={idx} className="flex gap-2 text-[11px] bg-hub-bg/30 p-2 rounded">
-                                <div className="w-5 h-5 rounded-full bg-slate-800 flex items-center justify-center text-[9px] text-blue-400 font-bold shrink-0">{c.initials}</div>
-                                <div className="flex-1">
-                                  <p className="font-semibold text-slate-300">{c.author} <span className="text-slate-600 font-normal ml-1">{c.time}</span></p>
-                                  <p className="text-slate-400 mt-0.5">{c.text}</p>
-                                </div>
-                              </div>
-                            ))}
+                        {/* Task Status controls */}
+                        {modal === 'tasks' && (
+                          <div className="flex items-center gap-2 mt-3 pt-2 border-t border-white/5">
+                            <span className="text-[10px] uppercase font-bold text-slate-500">Update Status:</span>
+                            <select
+                              value={item.status}
+                              onChange={async (e) => {
+                                const newStatus = e.target.value;
+                                try {
+                                  await api.updateTaskStatus(item.id, newStatus, '00000000-0000-0000-0000-000000000000');
+                                } catch (err: any) {
+                                  alert(err.message || 'Failed to update task status');
+                                }
+                              }}
+                              className="bg-hub-bg text-slate-200 border border-hub-border rounded text-[11px] px-2 py-1 focus:outline-none"
+                            >
+                              <option value="todo">To Do</option>
+                              <option value="in_progress">In Progress</option>
+                              <option value="blocked">Blocked</option>
+                              <option value="done">Done</option>
+                            </select>
                           </div>
                         )}
 
@@ -456,8 +464,8 @@ export function ProjectWorkspace({
                                 onClick={() => {
                                   if ((commentInputs[item.id] || '').trim()) {
                                     item.comments.push({
-                                      initials: 'OV',
-                                      author: 'Ovee',
+                                      initials: currentUser ? currentUser.email.slice(0, 2).toUpperCase() : 'OV',
+                                      author: currentUser ? currentUser.email : 'Ovee',
                                       time: 'Just Now',
                                       text: commentInputs[item.id]
                                     });
