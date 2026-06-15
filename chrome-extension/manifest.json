@@ -1,0 +1,30 @@
+{
+  "manifest_version": 3,
+  "name": "StartupHub Capture",
+  "version": "1.0.0",
+  "description": "Capture startup ideas instantly from anywhere on your OS",
+  "permissions": [
+    "activeTab",
+    "commands"
+  ],
+  "host_permissions": [
+    "http://localhost:3001/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Capture Idea"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "commands": {
+    "capture-idea": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+Y",
+        "mac": "MacCtrl+Shift+Y"
+      },
+      "description": "Open Instant Idea Capture Window",
+      "global": true
+    }
+  }
+}

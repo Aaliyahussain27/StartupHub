@@ -6,7 +6,10 @@
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
     "build": "tsc",
-    "start": "node dist/index.js"
+    "start": "node dist/index.js",
+    "db:migrate": "ts-node -e \"process.env.DATABASE_URL && require('./scripts/migrate.ts')\" 2>/dev/null || npx ts-node scripts/migrate.ts",
+    "db:migrate:dry": "npx ts-node scripts/migrate.ts -- --dry-run",
+    "db:rollback": "npx ts-node scripts/migrate.ts -- --rollback"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.20.0",

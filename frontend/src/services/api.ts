@@ -144,6 +144,15 @@ export const api = {
     }>;
   },
 
+  // 3e. Related meetings for an idea (semantic similarity)
+  getRelatedMeetings: async (ideaId: string, workspaceId: string = '00000000-0000-0000-0000-000000000000'): Promise<Array<{
+    id: string; title: string; duration_seconds: number; processed: boolean; score: number; created_at: string;
+  }>> => {
+    const res = await fetch(`${BACKEND_URL}/api/ideas/${ideaId}/related-meetings?workspaceId=${workspaceId}`);
+    if (!res.ok) throw new Error('Failed to fetch related meetings');
+    return res.json();
+  },
+
   // 4. Convert Idea to Project
   convertIdeaToProject: async (ideaId: string, owner: string, deadline: string, workspaceId: string = '00000000-0000-0000-0000-000000000000') => {
     const res = await fetch(`${BACKEND_URL}/api/projects/from-idea/${ideaId}`, {

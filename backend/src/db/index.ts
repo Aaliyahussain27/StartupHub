@@ -128,6 +128,17 @@ export interface OnboardingPDF {
   created_at: Date | string;
 }
 
+export interface MeetingTranscript {
+  id: string;
+  workspace_id: string;
+  title: string;
+  raw_transcript: string;
+  duration_seconds: number;
+  processed: boolean;
+  embedding: number[];
+  created_at: Date | string;
+}
+
 // In-Memory Fallback DB State
 interface FallbackDatabase {
   workspaces: Workspace[];
@@ -143,6 +154,7 @@ interface FallbackDatabase {
   onboarding_pdfs: OnboardingPDF[];
   project_members: ProjectMember[];
   user_sessions: UserSession[];
+  meeting_transcripts: MeetingTranscript[];
 }
 
 const FALLBACK_DB_PATH = path.join(__dirname, '../../db_fallback.json');
@@ -162,7 +174,8 @@ let fallbackData: FallbackDatabase = {
   github_prs: [],
   onboarding_pdfs: [],
   project_members: [],
-  user_sessions: []
+  user_sessions: [],
+  meeting_transcripts: []
 };
 
 // Log helper
@@ -331,6 +344,17 @@ async function runPostgresMigrations(client: any) {
         user_id UUID REFERENCES users(id) ON DELETE CASCADE,
         expires_at TIMESTAMP
       );
+
+      CREATE TABLE IF NOT EXISTS meeting_transcripts (
+        id UUID PRIMARY KEY,
+        workspace_id UUID REFERENCES workspaces(id) ON DELETE CASCADE,
+        title TEXT,
+        raw_transcript TEXT NOT NULL,
+        duration_seconds INT,
+        processed BOOLEAN DEFAULT FALSE,
+        embedding VECTOR(1536),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
     `);
 
     // Create unique index for user email after adding columns
@@ -365,6 +389,7 @@ function setupFallbackMode() {
       fallbackData = JSON.parse(dataStr);
       if (!fallbackData.project_members) fallbackData.project_members = [];
       if (!fallbackData.user_sessions) fallbackData.user_sessions = [];
+      if (!fallbackData.meeting_transcripts) fallbackData.meeting_transcripts = [];
       log('INFO', `Loaded local JSON database from: ${FALLBACK_DB_PATH}`);
       return;
     } catch (err) {
@@ -390,7 +415,8 @@ function setupFallbackMode() {
     github_prs: [],
     onboarding_pdfs: [],
     project_members: [],
-    user_sessions: []
+    user_sessions: [],
+    meeting_transcripts: []
   };
 
   saveFallbackData();
@@ -1053,5 +1079,68 @@ export const db = {
       [userId]
     );
     return res.rows;
+  },
+
+  // MEETING TRANSCRIPTS
+  getMeetingTranscripts: async (workspaceId: string = DEFAULT_WORKSPACE_ID): Promise<MeetingTranscript[]> => {
+    if (isFallbackMode || !pgPool) {
+      if (!fallbackData.meeting_transcripts) fallbackData.meeting_transcripts = [];
+      return fallbackData.meeting_transcripts.filter(t => t.workspace_id === workspaceId);
+    }
+    const res = await pgPool.query('SELECT * FROM meeting_transcripts WHERE workspace_id = $1 ORDER BY created_at DESC', [workspaceId]);
+    return res.rows;
+  },
+
+  getMeetingTranscriptById: async (id: string): Promise<MeetingTranscript | null> => {
+    if (isFallbackMode || !pgPool) {
+      if (!fallbackData.meeting_transcripts) fallbackData.meeting_transcripts = [];
+      return fallbackData.meeting_transcripts.find(t => t.id === id) || null;
+    }
+    const res = await pgPool.query('SELECT * FROM meeting_transcripts WHERE id = $1', [id]);
+    return res.rows[0] || null;
+  },
+
+  insertMeetingTranscript: async (transcript: Omit<MeetingTranscript, 'id' | 'created_at' | 'processed'>): Promise<MeetingTranscript> => {
+    const fullTranscript: MeetingTranscript = {
+      id: uuidv4(),
+      processed: false,
+      ...transcript,
+      created_at: new Date()
+    };
+    if (isFallbackMode || !pgPool) {
+      if (!fallbackData.meeting_transcripts) fallbackData.meeting_transcripts = [];
+      fallbackData.meeting_transcripts.push(fullTranscript);
+      saveFallbackData();
+      return fullTranscript;
+    }
+    await pgPool.query(
+      'INSERT INTO meeting_transcripts (id, workspace_id, title, raw_transcript, duration_seconds, processed, embedding) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+      [fullTranscript.id, fullTranscript.workspace_id, fullTranscript.title, fullTranscript.raw_transcript, fullTranscript.duration_seconds, fullTranscript.processed, fullTranscript.embedding]
+    );
+    return fullTranscript;
+  },
+
+  updateMeetingTranscript: async (id: string, updates: Partial<MeetingTranscript>): Promise<MeetingTranscript | null> => {
+    if (isFallbackMode || !pgPool) {
+      if (!fallbackData.meeting_transcripts) fallbackData.meeting_transcripts = [];
+      const idx = fallbackData.meeting_transcripts.findIndex(t => t.id === id);
+      if (idx === -1) return null;
+      fallbackData.meeting_transcripts[idx] = {
+        ...fallbackData.meeting_transcripts[idx],
+        ...updates
+      };
+      saveFallbackData();
+      return fallbackData.meeting_transcripts[idx];
+    }
+    
+    const fields = Object.keys(updates);
+    if (fields.length === 0) return null;
+    
+    const setQuery = fields.map((f, i) => `"${f}" = $${i + 2}`).join(', ');
+    const values = fields.map(f => (updates as any)[f]);
+    
+    const query = `UPDATE meeting_transcripts SET ${setQuery} WHERE id = $1 RETURNING *`;
+    const res = await pgPool.query(query, [id, ...values]);
+    return res.rows[0] || null;
   }
 };

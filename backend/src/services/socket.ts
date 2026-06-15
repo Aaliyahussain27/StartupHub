@@ -15,8 +15,8 @@ const log = (level: string, message: string) => {
 // Runs on a 5-minute interval after server start.
 // Emits `momentum_alert` and `blocker_escalation` events to workspace rooms.
 // ─────────────────────────────────────────────────────────────────────────────
-const STALL_DAYS = 3;           // flag project if no task moved in 3 days
-const BLOCKER_ESCALATE_HRS = 24; // escalate blocker if stuck > 24 hours
+const STALL_DAYS = 0;            // TEST: set to 3 for production (3 days)
+const BLOCKER_ESCALATE_HRS = 0;  // TEST: set to 24 for production (24 hours)
 
 async function runAlertChecks() {
   if (!io) return;
@@ -115,8 +115,8 @@ export function initializeSocket(server: HttpServer) {
     });
   });
 
-  // Start periodic alert checks (every 5 minutes)
-  const ALERT_INTERVAL_MS = 5 * 60 * 1000;
+  // Runs every 30 SECONDS for testing (change to 5 * 60 * 1000 for production)
+  const ALERT_INTERVAL_MS = 30 * 1000;
   setInterval(runAlertChecks, ALERT_INTERVAL_MS);
   log('INFO', `Alert checker scheduled every ${ALERT_INTERVAL_MS / 1000}s`);
 

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Lightbulb,
   Layers,
@@ -19,7 +20,8 @@ import {
   GitMerge,
   Link2,
   Sun,
-  Moon
+  Moon,
+  Mic
 } from 'lucide-react';
 import { useWebSocket } from './hooks/useWebSocket';
 import { api, type SearchResult, type SimilarIdea } from './services/api';
@@ -27,6 +29,8 @@ import { ToastContainer, type Toast, type ToastType } from './components/Toast';
 import { DailyBriefing } from './components/DailyBriefing';
 import { ProjectWorkspace } from './components/ProjectWorkspace';
 import { CommunicationHub } from './components/CommunicationHub';
+import { MeetingTranscription } from './components/MeetingTranscription';
+import { useAppStore } from './store/useAppStore';
 
 const DEFAULT_WORKSPACE = '00000000-0000-0000-0000-000000000000';
 
@@ -60,10 +64,34 @@ export function StartupHubLogo() {
 export default function App() {
   // Core Real-Time Ingestion Connection Hooks
   const { isConnected, dashboardData, momentumAlerts, blockerEscalation } = useWebSocket(DEFAULT_WORKSPACE);
+  const queryClient = useQueryClient();
 
-  // Manual Theme Control Matrix Layer State
-  const [theme, setTheme] = useState(() => {
-    return localStorage.getItem('sh-theme') || 'dark';
+  // Central Zustand Store integration
+  const {
+    theme,
+    toggleTheme,
+    currentUser,
+    setCurrentUser,
+    activeProject,
+    setActiveProject,
+    activeTool,
+    setActiveTool,
+    activeIdea,
+    setActiveIdea
+  } = useAppStore();
+
+  // TanStack Query for workspace users
+  const { data: workspaceUsers = [] } = useQuery({
+    queryKey: ['workspaceUsers', currentUser?.id],
+    queryFn: () => api.getUsers(DEFAULT_WORKSPACE),
+    enabled: !!currentUser
+  });
+
+  // TanStack Query for similar ideas matching the active idea
+  const { data: similarIdeas = [], isLoading: loadingSimilar } = useQuery({
+    queryKey: ['similarIdeas', activeIdea?.id],
+    queryFn: () => activeIdea?.id ? api.getSimilarIdeas(activeIdea.id, DEFAULT_WORKSPACE) : Promise.resolve([]),
+    enabled: !!activeIdea?.id
   });
 
   useEffect(() => {
@@ -73,21 +101,14 @@ export default function App() {
     } else {
       root.classList.remove('dark');
     }
-    localStorage.setItem('sh-theme', theme);
   }, [theme]);
 
-  const toggleTheme = () => {
-    setTheme(prev => (prev === 'dark' ? 'light' : 'dark'));
-  };
-
   // User Auth States
-  const [currentUser, setCurrentUser] = useState<any | null>(null);
   const [authChecking, setAuthChecking] = useState(true);
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
   const [authEmail, setAuthEmail] = useState('');
   const [authPassword, setAuthPassword] = useState('');
   const [authError, setAuthError] = useState<string | null>(null);
-  const [workspaceUsers, setWorkspaceUsers] = useState<any[]>([]);
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -96,8 +117,6 @@ export default function App() {
         try {
           const res = await api.getCurrentUser();
           setCurrentUser(res.user);
-          const usersList = await api.getUsers(DEFAULT_WORKSPACE);
-          setWorkspaceUsers(usersList);
         } catch (err) {
           console.warn('Auth check failed, clearing token');
           localStorage.removeItem('sh-auth-token');
@@ -121,8 +140,6 @@ export default function App() {
       localStorage.setItem('sh-auth-token', res.token);
       setCurrentUser(res.user);
       
-      const usersList = await api.getUsers(DEFAULT_WORKSPACE);
-      setWorkspaceUsers(usersList);
       pushToast('success', 'Welcome', authMode === 'login' ? 'Successfully logged in.' : 'Account created successfully.');
       
       window.location.reload();
@@ -134,7 +151,6 @@ export default function App() {
   const handleLogout = () => {
     localStorage.removeItem('sh-auth-token');
     setCurrentUser(null);
-    setWorkspaceUsers([]);
     pushToast('info', 'Logged Out', 'You have been safely signed out.');
   };
 
@@ -173,11 +189,6 @@ export default function App() {
   const [appError, setAppError] = useState<string | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
 
-  const [activeProject, setActiveProject] = useState<any | null>(null);
-  const [activeTool, setActiveTool] = useState<'briefing' | 'onboarding' | 'simulator' | 'comms' | null>(null);
-  const [activeIdea, setActiveIdea] = useState<any | null>(null);
-  const [similarIdeas, setSimilarIdeas] = useState<SimilarIdea[]>([]);
-  const [loadingSimilar, setLoadingSimilar] = useState(false);
   const [mergingId, setMergingId] = useState<string | null>(null);
 
   const [duplicateCandidates, setDuplicateCandidates] = useState<SimilarIdea[]>([]);
@@ -186,6 +197,10 @@ export default function App() {
   // Related messages for active idea
   const [relatedMessages, setRelatedMessages] = useState<any[]>([]);
   const [loadingRelated, setLoadingRelated] = useState(false);
+
+  // Related meetings for active idea
+  const [relatedMeetings, setRelatedMeetings] = useState<any[]>([]);
+  const [loadingMeetings, setLoadingMeetings] = useState(false);
 
   const [sectionOpen, setSectionOpen] = useState({ ideas: true, projects: true, tools: true });
   const toggleSection = (key: 'ideas' | 'projects' | 'tools') => {
@@ -273,17 +288,7 @@ export default function App() {
     setMockGithubDesc('');
   }, [mockSource]);
 
-  useEffect(() => {
-    if (!activeIdea?.id) {
-      setSimilarIdeas([]);
-      return;
-    }
-    setLoadingSimilar(true);
-    api.getSimilarIdeas(activeIdea.id, DEFAULT_WORKSPACE)
-      .then(setSimilarIdeas)
-      .catch(() => setSimilarIdeas([]))
-      .finally(() => setLoadingSimilar(false));
-  }, [activeIdea?.id]);
+
 
   // Load related messages whenever active idea changes
   useEffect(() => {
@@ -293,6 +298,16 @@ export default function App() {
       .then(setRelatedMessages)
       .catch(() => setRelatedMessages([]))
       .finally(() => setLoadingRelated(false));
+  }, [activeIdea?.id]);
+
+  // Load related meetings whenever active idea changes
+  useEffect(() => {
+    if (!activeIdea?.id) { setRelatedMeetings([]); return; }
+    setLoadingMeetings(true);
+    api.getRelatedMeetings(activeIdea.id, DEFAULT_WORKSPACE)
+      .then(setRelatedMeetings)
+      .catch(() => setRelatedMeetings([]))
+      .finally(() => setLoadingMeetings(false));
   }, [activeIdea?.id]);
 
   // Fire toasts when momentum/blocker alerts arrive via WebSocket
@@ -337,7 +352,7 @@ export default function App() {
     setMergingId(mergeId);
     try {
       const result = await api.mergeIdeas(keepId, mergeId, DEFAULT_WORKSPACE);
-      setSimilarIdeas(prev => prev.filter(s => s.id !== mergeId));
+      queryClient.invalidateQueries({ queryKey: ['similarIdeas'] });
       setDuplicateCandidates(prev => prev.filter(s => s.id !== mergeId));
       if (activeIdea?.id === keepId || activeIdea?.id === mergeId) {
         setActiveIdea(result.idea);
@@ -809,7 +824,8 @@ export default function App() {
                 </button>
                 {sectionOpen.tools && ([
                   { label: 'Comms Hub',            key: 'comms',      icon: <MessageSquare className="h-3.5 w-3.5" /> },
-                  { label: 'AI Briefing',          key: 'briefing',   icon: <CheckSquare   className="h-3.5 w-3.5" /> },
+                  { label: 'AI Daily Briefing',    key: 'briefing',   icon: <CheckSquare   className="h-3.5 w-3.5" /> },
+                  { label: 'Meeting Transcribe',   key: 'meetings',   icon: <Mic           className="h-3.5 w-3.5" /> },
                   { label: 'Onboarding Generator', key: 'onboarding', icon: <FileDown      className="h-3.5 w-3.5" /> },
                   { label: 'Event Simulator',      key: 'simulator',  icon: <Activity      className="h-3.5 w-3.5" /> },
                 ] as const).map(tool => (
@@ -862,6 +878,10 @@ export default function App() {
                 </button>
               </form>
             </div>
+          )}
+
+          {activeTool === 'meetings' && (
+            <MeetingTranscription />
           )}
 
           {activeTool === 'simulator' && (
@@ -1007,6 +1027,30 @@ export default function App() {
                           <span className="text-[9px] font-mono px-1 py-0.5 rounded bg-slate-100 dark:bg-hub-border text-slate-500 dark:text-blue-tide shrink-0">{Math.round(m.score * 100)}% match</span>
                         </div>
                         <p className="text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed line-clamp-3">{m.text}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* LINKED MEETINGS — semantic links from transcribed meeting notes */}
+              <div>
+                <h3 className="text-[11px] font-bold text-slate-400 dark:text-blue-tide uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                  <Mic className="h-3.5 w-3.5" /> Linked Meetings
+                </h3>
+                <div className="flex flex-col gap-2 bg-slate-50 dark:bg-hub-bg/50 rounded-lg border border-slate-200 dark:border-hub-border/40 p-3">
+                  {loadingMeetings && <p className="text-[11px] text-slate-400 dark:text-slate-600">Finding related meetings...</p>}
+                  {!loadingMeetings && relatedMeetings.length === 0 && (
+                    <p className="text-[11px] text-slate-400 dark:text-slate-600">No related meetings found. Record and analyze meetings to auto-link.</p>
+                  )}
+                  {relatedMeetings.map((m) => (
+                    <div key={m.id} className="flex items-start gap-2.5 bg-white dark:bg-hub-card/60 rounded-lg border border-slate-100 dark:border-hub-border/50 px-3 py-2 cursor-pointer hover:border-glow-indigo/40" onClick={() => { setActiveTool('meetings'); setActiveIdea(null); }}>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-0.5">
+                          <span className="text-[10px] font-bold text-slate-700 dark:text-slate-300 truncate">{m.title}</span>
+                          <span className="text-[9px] font-mono px-1 py-0.5 rounded bg-slate-100 dark:bg-hub-border text-slate-500 dark:text-blue-tide shrink-0">{Math.round(m.score * 100)}% match</span>
+                        </div>
+                        <p className="text-[10px] text-slate-500">{new Date(m.created_at).toLocaleDateString()} • {Math.floor(m.duration_seconds / 60)}m</p>
                       </div>
                     </div>
                   ))}
@@ -1192,7 +1236,7 @@ export default function App() {
                   required
                 >
                   <option value="">Select Owner</option>
-                  {workspaceUsers.map(u => (
+                  {workspaceUsers.map((u: any) => (
                     <option key={u.id} value={u.email}>{u.email}</option>
                   ))}
                 </select>
@@ -1250,7 +1294,7 @@ export default function App() {
                   className="w-full bg-slate-50 dark:bg-hub-bg text-sm text-slate-800 dark:text-slate-200 px-3 py-2 rounded-lg border border-slate-200 dark:border-hub-border focus:outline-none focus:border-slate-400 dark:focus:border-glow-indigo/60"
                 >
                   <option value="">Unassigned</option>
-                  {workspaceUsers.map(u => (
+                  {workspaceUsers.map((u: any) => (
                     <option key={u.id} value={u.email}>{u.email}</option>
                   ))}
                 </select>

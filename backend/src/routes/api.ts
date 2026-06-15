@@ -1173,4 +1173,180 @@ router.post('/projects/:id/settings', requireAuth, async (req: Request, res: Res
   }
 });
 
+// MEETING & WEBHOOK ENDPOINTS
+
+// 21. POST /webhooks/meeting (Meeting Ingestion)
+router.post('/webhooks/meeting', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { title, raw_transcript, duration_seconds } = req.body;
+    const workspaceId = req.body.workspaceId || DEFAULT_WORKSPACE_ID;
+
+    if (!raw_transcript || raw_transcript.trim() === '') {
+      res.status(400).json({ error: 'raw_transcript is required.' });
+      return;
+    }
+
+    log('INFO', `Webhook meeting ingestion: "${title || 'Untitled Meeting'}"`);
+    const embedding = await generateEmbedding(raw_transcript);
+
+    // Save initial transcript
+    const transcript = await db.insertMeetingTranscript({
+      workspace_id: workspaceId,
+      title: title || `Meeting - ${new Date().toLocaleDateString()}`,
+      raw_transcript,
+      duration_seconds: Number(duration_seconds || 0),
+      embedding
+    });
+
+    // Extract decisions and summary
+    const summary = await summarizeMeetingNotes(raw_transcript);
+
+    // Save Decisions
+    const insertedDecisions = [];
+    for (const decText of summary.decisions) {
+      const decEmbedding = await generateEmbedding(decText);
+      const decRecord = await db.insertDecision({
+        workspace_id: workspaceId,
+        decision_text: decText,
+        source_message_id: null,
+        embedding: decEmbedding
+      });
+      insertedDecisions.push(decRecord);
+    }
+
+    // Save Action Items
+    const actionItems = await extractActionItems(raw_transcript);
+    const insertedActionItems = [];
+    for (const item of actionItems) {
+      const actionRecord = await db.insertActionItem({
+        workspace_id: workspaceId,
+        owner: item.owner || 'Unassigned',
+        task: item.task,
+        deadline: item.deadline || 'No deadline',
+        status: 'pending'
+      });
+      insertedActionItems.push(actionRecord);
+    }
+
+    // Mark as processed
+    await db.updateMeetingTranscript(transcript.id, { processed: true });
+
+    // Notify clients of workspace updates
+    await broadcastDashboardUpdate(workspaceId);
+
+    res.status(201).json({
+      success: true,
+      transcriptId: transcript.id,
+      summary,
+      actionItemsCount: actionItems.length,
+      decisionsCount: summary.decisions.length
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// 22. GET /meetings
+router.get('/meetings', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const workspaceId = (req.query.workspaceId as string) || DEFAULT_WORKSPACE_ID;
+    const meetings = await db.getMeetingTranscripts(workspaceId);
+    res.json(meetings);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// 23. GET /meetings/:id
+router.get('/meetings/:id', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params;
+    const meeting = await db.getMeetingTranscriptById(id);
+    if (!meeting) {
+      res.status(404).json({ error: 'Meeting transcript not found.' });
+      return;
+    }
+    res.json(meeting);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// 24. GET /meetings/:id/related-ideas (Semantic Idea Linking from Meeting Notes)
+router.get('/meetings/:id/related-ideas', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params;
+    const workspaceId = (req.query.workspaceId as string) || DEFAULT_WORKSPACE_ID;
+    const meeting = await db.getMeetingTranscriptById(id);
+    if (!meeting) {
+      res.status(404).json({ error: 'Meeting not found.' });
+      return;
+    }
+
+    if (!meeting.embedding || meeting.embedding.length === 0) {
+      res.json([]);
+      return;
+    }
+
+    const similar = await db.findSimilarIdeas(workspaceId, meeting.embedding, {
+      minScore: 0.3,
+      limit: 5,
+      status: ['inbox', 'project']
+    });
+
+    res.json(similar.map(s => ({
+      id: s.idea.id,
+      title: s.idea.title,
+      description: s.idea.description,
+      status: s.idea.status,
+      score: s.score,
+      created_at: s.idea.created_at
+    })));
+  } catch (err) {
+    next(err);
+  }
+});
+
+// 25. GET /ideas/:id/related-meetings (Semantic Meeting Linking from Idea)
+router.get('/ideas/:id/related-meetings', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params;
+    const workspaceId = (req.query.workspaceId as string) || DEFAULT_WORKSPACE_ID;
+    const idea = await db.getIdeaById(id);
+    if (!idea) {
+      res.status(404).json({ error: 'Idea not found.' });
+      return;
+    }
+
+    if (!idea.embedding || idea.embedding.length === 0) {
+      res.json([]);
+      return;
+    }
+
+    const meetings = await db.getMeetingTranscripts(workspaceId);
+    
+    // Sort meetings by cosine similarity to this idea
+    const scoredMeetings = meetings
+      .filter(m => m.embedding && m.embedding.length > 0)
+      .map(m => {
+        const score = cosineSimilarity(idea.embedding, m.embedding);
+        return { meeting: m, score };
+      })
+      .filter(res => res.score >= 0.3)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 5);
+
+    res.json(scoredMeetings.map(sm => ({
+      id: sm.meeting.id,
+      title: sm.meeting.title,
+      duration_seconds: sm.meeting.duration_seconds,
+      processed: sm.meeting.processed,
+      score: sm.score,
+      created_at: sm.meeting.created_at
+    })));
+  } catch (err) {
+    next(err);
+  }
+});
+
 export default router;
