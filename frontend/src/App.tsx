@@ -167,6 +167,8 @@ export default function App() {
   const [selectedIdeaForProj, setSelectedIdeaForProj] = useState<any | null>(null);
   const [projOwner, setProjOwner] = useState('Ovee'); 
   const [projDeadline, setProjDeadline] = useState('2026-06-19'); 
+  const [projTitle, setProjTitle] = useState('');
+  const [projDesc, setProjDesc] = useState(''); 
 
   // Task creation states
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
@@ -390,11 +392,32 @@ export default function App() {
       return;
     }
     try {
-      await api.updateProjectSettings(targetProject.id, { owner: projOwner, deadline: projDeadline }, DEFAULT_WORKSPACE);
+      await api.updateProjectSettings(
+        targetProject.id, 
+        { owner: projOwner, deadline: projDeadline, title: projTitle, description: projDesc }, 
+        DEFAULT_WORKSPACE
+      );
       setIsProjectModalOpen(false);
-      pushToast('success', 'Settings Saved', `Deadline and owner updated for "${targetProject.title}".`);
+      pushToast('success', 'Settings Saved', `Project settings updated successfully.`);
     } catch (err: any) {
       setAppError(err.message || 'Failed to update project settings');
+    }
+  };
+
+  const handleDeleteProject = async (projectId: string) => {
+    const proj = projects.find((p: any) => p.id === projectId);
+    const title = proj ? proj.title : 'this project';
+    if (!window.confirm(`Are you sure you want to permanently delete "${title}"? This action cannot be undone.`)) {
+      return;
+    }
+    try {
+      await api.deleteProject(projectId, DEFAULT_WORKSPACE);
+      pushToast('success', 'Project Deleted', `"${title}" has been successfully deleted.`);
+      if (activeProject?.id === projectId) {
+        setActiveProject(null);
+      }
+    } catch (err: any) {
+      setAppError(err.message || 'Failed to delete project');
     }
   };
 
@@ -1141,6 +1164,8 @@ export default function App() {
                   setActiveProject(target);
                   setProjOwner(target.owner || '');
                   setProjDeadline(target.deadline || '');
+                  setProjTitle(target.title || '');
+                  setProjDesc(target.description || '');
                 }
                 setSelectedIdeaForProj(null);
                 setIsProjectModalOpen(true);
@@ -1154,6 +1179,7 @@ export default function App() {
                 setActiveProject(target);
                 setIsTaskModalOpen(true);
               }}
+              onDeleteProjectClick={handleDeleteProject}
             />
           )}
 
@@ -1252,6 +1278,32 @@ export default function App() {
             )}
 
             <form onSubmit={selectedIdeaForProj ? handleConvertProject : handleSaveDeadlineUpdate} className="space-y-4">
+              {!selectedIdeaForProj && (
+                <>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">Project Title</label>
+                    <input
+                      type="text"
+                      value={projTitle}
+                      onChange={(e) => setProjTitle(e.target.value)}
+                      className="w-full bg-slate-50 dark:bg-hub-bg text-sm text-slate-800 dark:text-slate-200 px-3 py-2 rounded-lg border border-slate-200 dark:border-hub-border focus:outline-none focus:border-slate-400 dark:focus:border-glow-indigo/60"
+                      required
+                      placeholder="Project Title"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">Project Description</label>
+                    <textarea
+                      value={projDesc}
+                      onChange={(e) => setProjDesc(e.target.value)}
+                      rows={3}
+                      className="w-full bg-slate-50 dark:bg-hub-bg text-sm text-slate-800 dark:text-slate-200 px-3 py-2 rounded-lg border border-slate-200 dark:border-hub-border focus:outline-none focus:border-slate-400 dark:focus:border-glow-indigo/60 animate-fadeIn"
+                      required
+                      placeholder="Project Description"
+                    />
+                  </div>
+                </>
+              )}
               <div>
                 <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">Project Owner</label>
                 <select

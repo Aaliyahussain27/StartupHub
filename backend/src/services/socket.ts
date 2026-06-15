@@ -136,6 +136,7 @@ export async function getDashboardState(workspaceId: string = DEFAULT_WORKSPACE_
     const projects = await db.getProjects(workspaceId);
     const messages = await db.getMessages(workspaceId);
     const githubPrs = await db.getGithubPRs(workspaceId);
+    const projectMembers = await db.getAllProjectMembers();
 
     // Blocker detection
     const blockerReport = await detectBlockers(tasks);
@@ -149,7 +150,8 @@ export async function getDashboardState(workspaceId: string = DEFAULT_WORKSPACE_
       messages: messages.slice(0, 50), // Send last 50 messages
       githubPrs,
       blockers: blockerReport.blockedTasks,
-      circularDependencies: blockerReport.circularDependencies
+      circularDependencies: blockerReport.circularDependencies,
+      projectMembers
     };
   } catch (err: any) {
     log('ERROR', `Failed to get dashboard state: ${err.message}`);
@@ -162,7 +164,8 @@ export async function getDashboardState(workspaceId: string = DEFAULT_WORKSPACE_
       messages: [],
       githubPrs: [],
       blockers: [],
-      circularDependencies: []
+      circularDependencies: [],
+      projectMembers: []
     };
   }
 }

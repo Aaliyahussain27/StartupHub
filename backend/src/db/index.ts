@@ -7,6 +7,51 @@ import { v4 as uuidv4 } from 'uuid';
 export const DEFAULT_WORKSPACE_ID = '00000000-0000-0000-0000-000000000000';
 export const DEFAULT_USER_ID = '11111111-1111-1111-1111-111111111111';
 
+// Helper to format numeric array to pgvector string representation: '[0.1,0.2,...]'
+function formatEmbedding(embedding: number[] | undefined | null): string | null {
+  if (!embedding || !Array.isArray(embedding)) return null;
+  return `[${embedding.join(',')}]`;
+}
+
+// Helper to parse dynamic vector inputs (e.g. from PG vector representation string or fallback arrays)
+export function parseVector(vectorVal: number[] | string | undefined | null): number[] {
+  if (!vectorVal) return [];
+  if (Array.isArray(vectorVal)) return vectorVal;
+  if (typeof vectorVal === 'string') {
+    try {
+      const cleaned = vectorVal.trim().replace(/^\[|\]$/g, '');
+      if (!cleaned) return [];
+      return cleaned.split(',').map(Number);
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
+// Helper to stringify dynamic vector inputs to bracket formatting: '[v1,v2,...]'
+export function stringifyVector(vectorVal: number[] | string | undefined | null): string {
+  if (!vectorVal) return '[]';
+  if (typeof vectorVal === 'string') {
+    let cleaned = vectorVal.trim();
+    if (!cleaned.startsWith('[')) cleaned = `[${cleaned}`;
+    if (!cleaned.endsWith(']')) cleaned = `${cleaned}]`;
+    return cleaned;
+  }
+  if (Array.isArray(vectorVal)) {
+    return `[${vectorVal.join(',')}]`;
+  }
+  return '[]';
+}
+
+function parseRowEmbeddings<T extends { embedding?: any }>(row: T): T {
+  if (!row) return row;
+  if ('embedding' in row && row.embedding !== undefined) {
+    row.embedding = parseVector(row.embedding);
+  }
+  return row;
+}
+
 // Interfaces for tables
 export interface Workspace {
   id: string;
@@ -449,11 +494,13 @@ function magnitude(arr: number[]): number {
   return Math.sqrt(sum);
 }
 
-export function cosineSimilarity(a: number[], b: number[]): number {
-  const magA = magnitude(a);
-  const magB = magnitude(b);
+export function cosineSimilarity(a: number[] | string, b: number[] | string): number {
+  const arrA = parseVector(a);
+  const arrB = parseVector(b);
+  const magA = magnitude(arrA);
+  const magB = magnitude(arrB);
   if (magA === 0 || magB === 0) return 0;
-  return dotProduct(a, b) / (magA * magB);
+  return dotProduct(arrA, arrB) / (magA * magB);
 }
 
 // Database helper queries wrapper
@@ -483,7 +530,7 @@ export const db = {
       return fallbackData.messages.filter(m => m.workspace_id === workspaceId);
     }
     const res = await pgPool.query('SELECT * FROM messages WHERE workspace_id = $1 ORDER BY timestamp DESC', [workspaceId]);
-    return res.rows;
+    return res.rows.map(parseRowEmbeddings);
   },
 
   insertMessage: async (message: Omit<Message, 'created_at'>): Promise<Message> => {
@@ -495,7 +542,7 @@ export const db = {
     }
     await pgPool.query(
       'INSERT INTO messages (id, workspace_id, source, channel, sender, text, embedding, timestamp) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
-      [fullMsg.id, fullMsg.workspace_id, fullMsg.source, fullMsg.channel, fullMsg.sender, fullMsg.text, fullMsg.embedding, fullMsg.timestamp]
+      [fullMsg.id, fullMsg.workspace_id, fullMsg.source, fullMsg.channel, fullMsg.sender, fullMsg.text, formatEmbedding(fullMsg.embedding), fullMsg.timestamp]
     );
     return fullMsg;
   },
@@ -506,7 +553,7 @@ export const db = {
       return fallbackData.decisions.filter(d => d.workspace_id === workspaceId);
     }
     const res = await pgPool.query('SELECT * FROM decisions WHERE workspace_id = $1 ORDER BY created_at DESC', [workspaceId]);
-    return res.rows;
+    return res.rows.map(parseRowEmbeddings);
   },
 
   insertDecision: async (decision: Omit<Decision, 'id' | 'created_at'>): Promise<Decision> => {
@@ -522,7 +569,7 @@ export const db = {
     }
     await pgPool.query(
       'INSERT INTO decisions (id, workspace_id, decision_text, source_message_id, embedding) VALUES ($1, $2, $3, $4, $5)',
-      [fullDec.id, fullDec.workspace_id, fullDec.decision_text, fullDec.source_message_id, fullDec.embedding]
+      [fullDec.id, fullDec.workspace_id, fullDec.decision_text, fullDec.source_message_id, formatEmbedding(fullDec.embedding)]
     );
     return fullDec;
   },
@@ -601,7 +648,7 @@ export const db = {
       return fallbackData.ideas.filter(i => i.workspace_id === workspaceId);
     }
     const res = await pgPool.query('SELECT * FROM ideas WHERE workspace_id = $1 ORDER BY created_at DESC', [workspaceId]);
-    return res.rows;
+    return res.rows.map(parseRowEmbeddings);
   },
 
   insertIdea: async (idea: Omit<Idea, 'id' | 'created_at'>): Promise<Idea> => {
@@ -617,7 +664,7 @@ export const db = {
     }
     await pgPool.query(
       'INSERT INTO ideas (id, workspace_id, title, description, source, status, embedding) VALUES ($1, $2, $3, $4, $5, $6, $7)',
-      [fullIdea.id, fullIdea.workspace_id, fullIdea.title, fullIdea.description, fullIdea.source, fullIdea.status, fullIdea.embedding]
+      [fullIdea.id, fullIdea.workspace_id, fullIdea.title, fullIdea.description, fullIdea.source, fullIdea.status, formatEmbedding(fullIdea.embedding)]
     );
     return fullIdea;
   },
@@ -627,7 +674,7 @@ export const db = {
       return fallbackData.ideas.find(i => i.id === id) ?? null;
     }
     const res = await pgPool.query('SELECT * FROM ideas WHERE id = $1', [id]);
-    return res.rows[0] ?? null;
+    return res.rows[0] ? parseRowEmbeddings(res.rows[0]) : null;
   },
 
   findSimilarIdeas: async (
@@ -664,7 +711,7 @@ export const db = {
     const statusClause = statusFilter
       ? `AND status IN (${statusFilter.map((_, i) => `$${i + 4}`).join(', ')})`
       : '';
-    const params: any[] = [`[${embedding.join(',')}]`, workspaceId, excludeId ?? null];
+    const params: any[] = [stringifyVector(embedding), workspaceId, excludeId ?? null];
     if (statusFilter) params.push(...statusFilter);
 
     const res = await pgPool.query(
@@ -680,7 +727,7 @@ export const db = {
 
     return res.rows
       .map((row: any) => ({
-        idea: row as Idea,
+        idea: parseRowEmbeddings(row) as Idea,
         score: Number(row.score)
       }))
       .filter(r => r.score >= minScore);
@@ -796,6 +843,22 @@ export const db = {
     return (res.rowCount ?? 0) > 0;
   },
 
+  deleteProject: async (id: string): Promise<boolean> => {
+    if (isFallbackMode || !pgPool) {
+      const idx = fallbackData.projects.findIndex(p => p.id === id);
+      if (idx > -1) {
+        fallbackData.projects.splice(idx, 1);
+        fallbackData.tasks = fallbackData.tasks.filter(t => t.project_id !== id);
+        fallbackData.project_members = fallbackData.project_members.filter(m => m.project_id !== id);
+        saveFallbackData();
+        return true;
+      }
+      return false;
+    }
+    const res = await pgPool.query('DELETE FROM projects WHERE id = $1', [id]);
+    return (res.rowCount ?? 0) > 0;
+  },
+
   // TASKS
   getTasks: async (workspaceId: string = DEFAULT_WORKSPACE_ID): Promise<Task[]> => {
     if (isFallbackMode || !pgPool) {
@@ -857,7 +920,7 @@ export const db = {
       return fallbackData.github_prs.filter(pr => pr.workspace_id === workspaceId);
     }
     const res = await pgPool.query('SELECT * FROM github_prs WHERE workspace_id = $1 ORDER BY created_at DESC', [workspaceId]);
-    return res.rows;
+    return res.rows.map(parseRowEmbeddings);
   },
 
   insertGithubPR: async (pr: Omit<GitHubPR, 'id' | 'created_at'>): Promise<GitHubPR> => {
@@ -873,7 +936,7 @@ export const db = {
     }
     await pgPool.query(
       'INSERT INTO github_prs (id, workspace_id, pr_number, title, description, linked_project_id, embedding) VALUES ($1, $2, $3, $4, $5, $6, $7)',
-      [fullPR.id, fullPR.workspace_id, fullPR.pr_number, fullPR.title, fullPR.description, fullPR.linked_project_id, fullPR.embedding]
+      [fullPR.id, fullPR.workspace_id, fullPR.pr_number, fullPR.title, fullPR.description, fullPR.linked_project_id, formatEmbedding(fullPR.embedding)]
     );
     return fullPR;
   },
@@ -907,9 +970,11 @@ export const db = {
 
   // SEMANTIC VECTOR SEARCH
   vectorSearch: async (
-    queryEmbedding: number[],
+    queryEmbedding: number[] | string,
     workspaceId: string = DEFAULT_WORKSPACE_ID
   ): Promise<Array<{ type: string; id: string; text: string; score: number; details?: any }>> => {
+    const queryArr = parseVector(queryEmbedding);
+
     if (isFallbackMode || !pgPool) {
       const results: Array<{ type: string; id: string; text: string; score: number; details?: any }> = [];
       
@@ -917,7 +982,7 @@ export const db = {
       fallbackData.messages
         .filter(m => m.workspace_id === workspaceId && m.embedding)
         .forEach(m => {
-          const score = cosineSimilarity(queryEmbedding, m.embedding);
+          const score = cosineSimilarity(queryArr, m.embedding);
           results.push({ type: 'message', id: m.id, text: `[${m.source.toUpperCase()}] ${m.sender}: ${m.text}`, score, details: m });
         });
 
@@ -925,7 +990,7 @@ export const db = {
       fallbackData.decisions
         .filter(d => d.workspace_id === workspaceId && d.embedding)
         .forEach(d => {
-          const score = cosineSimilarity(queryEmbedding, d.embedding);
+          const score = cosineSimilarity(queryArr, d.embedding);
           results.push({ type: 'decision', id: d.id, text: d.decision_text, score, details: d });
         });
 
@@ -933,7 +998,7 @@ export const db = {
       fallbackData.github_prs
         .filter(pr => pr.workspace_id === workspaceId && pr.embedding)
         .forEach(pr => {
-          const score = cosineSimilarity(queryEmbedding, pr.embedding);
+          const score = cosineSimilarity(queryArr, pr.embedding);
           results.push({ type: 'github_pr', id: pr.id, text: `[PR #${pr.pr_number}] ${pr.title}: ${pr.description}`, score, details: pr });
         });
 
@@ -941,7 +1006,7 @@ export const db = {
       fallbackData.ideas
         .filter(i => i.workspace_id === workspaceId && i.embedding)
         .forEach(i => {
-          const score = cosineSimilarity(queryEmbedding, i.embedding);
+          const score = cosineSimilarity(queryArr, i.embedding);
           results.push({ type: 'idea', id: i.id, text: `[IDEA] ${i.title}: ${i.description}`, score, details: i });
         });
 
@@ -969,14 +1034,14 @@ export const db = {
     `;
     
     // Convert embedding to string formatted for pgvector: '[0.1,0.2,0.3,...]'
-    const vectorStr = `[${queryEmbedding.join(',')}]`;
+    const vectorStr = stringifyVector(queryEmbedding);
     const res = await pgPool.query(queryStr, [vectorStr, workspaceId]);
     return res.rows.map(r => ({
       type: r.type,
       id: r.id,
       text: r.text,
       score: Number(r.score),
-      details: typeof r.details === 'string' ? JSON.parse(r.details) : r.details
+      details: r.details ? (typeof r.details === 'string' ? parseRowEmbeddings(JSON.parse(r.details)) : parseRowEmbeddings(r.details)) : null
     }));
   },
 
@@ -1068,6 +1133,14 @@ export const db = {
     return res.rows;
   },
 
+  getAllProjectMembers: async (): Promise<ProjectMember[]> => {
+    if (isFallbackMode || !pgPool) {
+      return fallbackData.project_members || [];
+    }
+    const res = await pgPool.query('SELECT * FROM project_members');
+    return res.rows;
+  },
+
   getUserProjects: async (userId: string): Promise<Project[]> => {
     if (isFallbackMode || !pgPool) {
       if (!fallbackData.project_members) fallbackData.project_members = [];
@@ -1088,7 +1161,7 @@ export const db = {
       return fallbackData.meeting_transcripts.filter(t => t.workspace_id === workspaceId);
     }
     const res = await pgPool.query('SELECT * FROM meeting_transcripts WHERE workspace_id = $1 ORDER BY created_at DESC', [workspaceId]);
-    return res.rows;
+    return res.rows.map(parseRowEmbeddings);
   },
 
   getMeetingTranscriptById: async (id: string): Promise<MeetingTranscript | null> => {
@@ -1097,7 +1170,7 @@ export const db = {
       return fallbackData.meeting_transcripts.find(t => t.id === id) || null;
     }
     const res = await pgPool.query('SELECT * FROM meeting_transcripts WHERE id = $1', [id]);
-    return res.rows[0] || null;
+    return res.rows[0] ? parseRowEmbeddings(res.rows[0]) : null;
   },
 
   insertMeetingTranscript: async (transcript: Omit<MeetingTranscript, 'id' | 'created_at' | 'processed'>): Promise<MeetingTranscript> => {
@@ -1115,7 +1188,7 @@ export const db = {
     }
     await pgPool.query(
       'INSERT INTO meeting_transcripts (id, workspace_id, title, raw_transcript, duration_seconds, processed, embedding) VALUES ($1, $2, $3, $4, $5, $6, $7)',
-      [fullTranscript.id, fullTranscript.workspace_id, fullTranscript.title, fullTranscript.raw_transcript, fullTranscript.duration_seconds, fullTranscript.processed, fullTranscript.embedding]
+      [fullTranscript.id, fullTranscript.workspace_id, fullTranscript.title, fullTranscript.raw_transcript, fullTranscript.duration_seconds, fullTranscript.processed, formatEmbedding(fullTranscript.embedding)]
     );
     return fullTranscript;
   },
@@ -1137,10 +1210,13 @@ export const db = {
     if (fields.length === 0) return null;
     
     const setQuery = fields.map((f, i) => `"${f}" = $${i + 2}`).join(', ');
-    const values = fields.map(f => (updates as any)[f]);
+    const values = fields.map(f => {
+      const val = (updates as any)[f];
+      return f === 'embedding' ? formatEmbedding(val) : val;
+    });
     
     const query = `UPDATE meeting_transcripts SET ${setQuery} WHERE id = $1 RETURNING *`;
     const res = await pgPool.query(query, [id, ...values]);
-    return res.rows[0] || null;
+    return res.rows[0] ? parseRowEmbeddings(res.rows[0]) : null;
   }
 };

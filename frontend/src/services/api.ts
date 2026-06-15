@@ -272,5 +272,17 @@ export const api = {
     });
     if (!res.ok) throw new Error('Failed to fetch assistant guidance');
     return res.json();
+  },
+
+  deleteProject: async (projectId: string, workspaceId: string = '00000000-0000-0000-0000-000000000000') => {
+    const res = await fetch(`${BACKEND_URL}/api/projects/${projectId}?workspaceId=${workspaceId}`, {
+      method: 'DELETE',
+      headers: getHeaders()
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to delete project');
+    }
+    return res.json();
   }
 };
