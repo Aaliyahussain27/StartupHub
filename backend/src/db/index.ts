@@ -941,6 +941,31 @@ export const db = {
     return fullPR;
   },
 
+  updateGithubPR: async (id: string, fields: Partial<Pick<GitHubPR, 'linked_project_id' | 'embedding'>>): Promise<boolean> => {
+    if (isFallbackMode || !pgPool) {
+      const idx = fallbackData.github_prs.findIndex(pr => pr.id === id);
+      if (idx > -1) {
+        fallbackData.github_prs[idx] = {
+          ...fallbackData.github_prs[idx],
+          ...fields
+        };
+        saveFallbackData();
+        return true;
+      }
+      return false;
+    }
+    const keys = Object.keys(fields);
+    if (keys.length === 0) return false;
+    const setQuery = keys.map((k, idx) => {
+      if (k === 'embedding') return `${k} = $${idx + 1}`;
+      return `${k} = $${idx + 1}`;
+    }).join(', ');
+    const params = keys.map(k => k === 'embedding' ? formatEmbedding((fields as any)[k]) : (fields as any)[k]);
+    params.push(id);
+    const res = await pgPool.query(`UPDATE github_prs SET ${setQuery} WHERE id = $${params.length}`, params);
+    return (res.rowCount ?? 0) > 0;
+  },
+
   // ONBOARDING PDFS
   getOnboardingPDFs: async (workspaceId: string = DEFAULT_WORKSPACE_ID): Promise<OnboardingPDF[]> => {
     if (isFallbackMode || !pgPool) {

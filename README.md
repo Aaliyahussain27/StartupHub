@@ -11,8 +11,6 @@ Startup teams use 5+ disconnected tools (WhatsApp, Slack, GitHub, Figma, Jira). 
 - **Ideation:** Good ideas get lost in chat. Meeting details buried in long notes. Same ideas discussed repeatedly.
 - **Execution:** Engineers waste 2+ hours/day context-switching. Design-dev misalignment. New hires take weeks to understand architecture.
 
-**Cost:** $200k/year wasted in a 5-person startup.
-
 ---
 
 ## The Solution
@@ -107,20 +105,6 @@ npm run db:migrate
 5. **Connect WhatsApp**
 - Set Twilio webhook to: `http://localhost:3001/webhooks/whatsapp`
 - Send test message to verify
-
----
-
-## Project Status
-
-🚀 **Hackathon MVP (10-day build)**
-- ✅ WhatsApp message ingestion
-- ✅ AI summarization & decision extraction
-- ✅ Real-time dashboard
-- ✅ Semantic search
-- ✅ Auto-generated onboarding PDFs
-- ⏳ Slack integration (in progress)
-- 📋 GitHub integration (planned)
-- 📋 Design-dev sync (planned)
 
 ---
 

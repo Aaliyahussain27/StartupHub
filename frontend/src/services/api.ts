@@ -178,6 +178,19 @@ export const api = {
     return res.json();
   },
 
+  updateTask: async (taskId: string, fields: { title?: string; status?: string; assignedTo?: string; dependencies?: string[] }, workspaceId: string = '00000000-0000-0000-0000-000000000000') => {
+    const res = await fetch(`${BACKEND_URL}/api/tasks/${taskId}`, {
+      method: 'PATCH',
+      headers: getHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ ...fields, workspaceId })
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to update task');
+    }
+    return res.json();
+  },
+
   // 6. Generate PDF and trigger browser file download
   generatePDF: async (newHireName: string, workspaceId: string = '00000000-0000-0000-0000-000000000000') => {
     const res = await fetch(`${BACKEND_URL}/api/pdf/generate`, {

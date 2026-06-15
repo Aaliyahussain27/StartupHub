@@ -23,7 +23,16 @@ import {
   Moon,
   Mic,
   Eye,
-  EyeOff
+  EyeOff,
+  GitBranch,
+  Hash,
+  Phone,
+  Send,
+  User,
+  Check,
+  GitPullRequest,
+  ClipboardList,
+  LayoutTemplate
 } from 'lucide-react';
 import { useWebSocket } from './hooks/useWebSocket';
 import { api, type SearchResult, type SimilarIdea } from './services/api';
@@ -268,7 +277,7 @@ export default function App() {
         pushToast('success', 'Project Created', newest?.title || 'A new project was generated.');
       }
       if ((dashboardData.blockers?.length || 0) > (prev.blockers?.length || 0)) {
-        pushToast('warning', 'Blocker Detected', 'A task blocker was flagged — check the action items panel.');
+        pushToast('warning', 'Blocker Detected', 'A task blocker was flagged â€” check the action items panel.');
       }
     }
     prevDataRef.current = dashboardData;
@@ -457,11 +466,11 @@ export default function App() {
       if (mockSource === 'slack') {
         await api.simulateSlack(mockText, mockSender, mockChannel, DEFAULT_WORKSPACE);
         setWebhookMessage('Slack event processed and broadcasted!');
-        pushToast('success', 'Slack Event', 'Message ingested — Claude is extracting decisions.');
+        pushToast('success', 'Slack Event', 'Message ingested â€” Claude is extracting decisions.');
       } else if (mockSource === 'whatsapp') {
         await api.simulateWhatsApp(mockText, mockSender, DEFAULT_WORKSPACE);
         setWebhookMessage('WhatsApp webhook digested and processed!');
-        pushToast('success', 'WhatsApp Event', 'Message ingested — AI processing in progress.');
+        pushToast('success', 'WhatsApp Event', 'Message ingested â€” AI processing in progress.');
       } else if (mockSource === 'github') {
         await api.simulateGitHub(mockGithubNum, mockGithubTitle, mockGithubDesc, DEFAULT_WORKSPACE);
         setWebhookMessage(`GitHub PR #${mockGithubNum} ingested!`);
@@ -480,7 +489,7 @@ export default function App() {
   const decisions = dashboardData?.decisions || [];
   const ideas = dashboardData?.ideas || [];
   
-  // Backend already scopes projects by user when authenticated — no client-side filter needed
+  // Backend already scopes projects by user when authenticated â€” no client-side filter needed
   const projects = (dashboardData?.projects || []).map((p: any) => ({
     ...p,
     activeSince: p.activeSince || '2026-06-10',
@@ -559,7 +568,7 @@ export default function App() {
               <div className="relative">
                 <input
                   type={showPassword ? 'text' : 'password'}
-                  placeholder="••••••••"
+                  placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢"
                   value={authPassword}
                   onChange={(e) => setAuthPassword(e.target.value)}
                   className="w-full bg-slate-950 text-sm text-slate-200 pl-3 pr-10 py-2.5 rounded-lg border border-slate-800 focus:outline-none focus:border-glow-indigo/80 transition-colors"
@@ -659,7 +668,7 @@ export default function App() {
             {theme === 'dark' ? <Sun className="h-4 w-4 text-amber-400" /> : <Moon className="h-4 w-4 text-slate-700" />}
           </button>
 
-          {/* NEW IDEA BUTTON — always visible */}
+          {/* NEW IDEA BUTTON â€” always visible */}
           <button
             onClick={() => setIsIdeaModalOpen(true)}
             className="flex items-center gap-1.5 bg-glow-indigo hover:bg-glow-indigo/90 px-3 py-2 rounded-lg text-sm font-semibold transition-all active:scale-95 shadow-md shadow-glow-indigo/20 shrink-0 whitespace-nowrap"
@@ -751,11 +760,11 @@ export default function App() {
                 </button>
                 {sectionOpen.ideas && (
                   ideas.filter((i: any) => i.status === 'inbox').length === 0
-                    ? <p className="text-[11px] text-slate-400 dark:text-slate-600 px-7 py-1">No ideas yet — press Cmd+K</p>
+                    ? <p className="text-[11px] text-slate-400 dark:text-slate-600 px-7 py-1">No ideas yet â€” press Cmd+K</p>
                     : ideas.filter((i: any) => i.status === 'inbox').map((i: any) => (
                       <div key={i.id} className="px-7 py-1.5">
                         <div
-                          onClick={() => { setActiveIdea(i); setActiveProject(null); setActiveTool(null); }}
+                          onClick={() => setActiveIdea(i)}
                           className={`flex items-center justify-between rounded-lg group cursor-pointer transition-colors px-1 -mx-1 ${activeIdea?.id === i.id ? 'bg-slate-100 dark:bg-hub-bg' : 'hover:bg-slate-50 dark:hover:bg-hub-bg/60'}`}
                         >
                           <span className={`text-[12px] truncate flex-1 ${activeIdea?.id === i.id ? 'text-slate-900 dark:text-slate-100' : 'text-slate-700 dark:text-slate-300'}`}>{i.title}</span>
@@ -773,7 +782,7 @@ export default function App() {
                             onClick={(e) => { e.stopPropagation(); setSelectedIdeaForProj(i); setIsProjectModalOpen(true); }}
                             className="text-[10px] text-glow-indigo opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap ml-2"
                           >
-                            → Project
+                            â†’ Project
                           </button>
                         </div>
                         {i.description && (
@@ -833,20 +842,21 @@ export default function App() {
                         ? 'bg-glow-indigo/10 text-glow-indigo border border-glow-indigo/20'
                         : 'bg-slate-100 dark:bg-hub-border text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-hub-border';
                       return (
-                        <div
+                        <button
+                          type="button"
                           key={p.id}
-                          onClick={() => { setActiveProject(p); setActiveTool(null); setActiveIdea(null); }}
-                          className={`px-7 py-1.5 rounded-lg cursor-pointer transition-colors ${activeProject?.id === p.id ? 'bg-slate-100 dark:bg-hub-bg' : 'hover:bg-slate-50 dark:hover:bg-hub-bg/60'}`}
+                          onClick={() => setActiveProject(p)}
+                          className={`w-full text-left px-7 py-1.5 rounded-lg cursor-pointer transition-colors ${activeProject?.id === p.id ? 'bg-slate-100 dark:bg-hub-bg' : 'hover:bg-slate-50 dark:hover:bg-hub-bg/60'}`}
                         >
-                          <div className="flex items-center justify-between gap-1">
+                          <span className="flex items-center justify-between gap-1">
                             <span className={`text-[12px] truncate flex-1 ${activeProject?.id === p.id ? 'text-slate-900 dark:text-slate-100' : 'text-slate-700 dark:text-slate-300'}`}>{p.title}</span>
                             {currentUser && <span className={`text-[8px] px-1.5 py-0.5 rounded-full font-bold uppercase shrink-0 ${roleCls}`}>{roleLabel}</span>}
                             <span className="text-[10px] text-slate-500 ml-1 shrink-0">{pct}%</span>
-                          </div>
-                          <div className="mt-1 h-0.5 bg-slate-200 dark:bg-hub-border rounded-full w-full">
-                            <div className="h-0.5 bg-emerald-500 rounded-full transition-all" style={{ width: `${pct}%` }} />
-                          </div>
-                        </div>
+                          </span>
+                          <span className="mt-1 flex h-0.5 w-full rounded-full bg-slate-200 dark:bg-hub-border overflow-hidden">
+                            <span className="h-0.5 rounded-full bg-emerald-500 transition-all" style={{ width: `${pct}%` }} />
+                          </span>
+                        </button>
                       );
                     })
                 )}
@@ -871,14 +881,15 @@ export default function App() {
                   { label: 'Onboarding Generator', key: 'onboarding', icon: <FileDown      className="h-3.5 w-3.5" /> },
                   { label: 'Event Simulator',      key: 'simulator',  icon: <Activity      className="h-3.5 w-3.5" /> },
                 ] as const).map(tool => (
-                  <div
+                  <button
                     key={tool.key}
-                    onClick={() => { setActiveTool(tool.key); setActiveProject(null); setActiveIdea(null); }}
-                    className={`flex items-center gap-2 px-7 py-1.5 rounded-lg cursor-pointer transition-colors ${activeTool === tool.key ? 'bg-slate-100 dark:bg-hub-bg text-slate-900 dark:text-slate-200' : 'hover:bg-slate-50 dark:hover:bg-hub-bg/60 text-slate-500 dark:text-slate-400'}`}
+                    type="button"
+                    onClick={() => setActiveTool(tool.key)}
+                    className={`w-full flex items-center gap-2 px-7 py-1.5 rounded-lg cursor-pointer transition-colors ${activeTool === tool.key ? 'bg-slate-100 dark:bg-hub-bg text-slate-900 dark:text-slate-200' : 'hover:bg-slate-50 dark:hover:bg-hub-bg/60 text-slate-500 dark:text-slate-400'}`}
                   >
                     <span className={activeTool === tool.key ? 'text-glow-indigo' : 'text-slate-400 dark:text-slate-500'}>{tool.icon}</span>
                     <span className="text-[12px]">{tool.label}</span>
-                  </div>
+                  </button>
                 ))}
               </div>
             </>
@@ -888,302 +899,503 @@ export default function App() {
         </section>
 
         {/* CENTER FRAME INTERACTIVE CONTENT AREA */}
-        <section className="flex-1 min-w-0">
+<section className="flex-1 min-w-0">
 
-          {activeTool === 'comms' && (
-            <CommunicationHub
-              messages={messages}
-              decisions={decisions}
-              actionItems={dashboardData?.actionItems || []}
-              githubPrs={githubPrs}
-              currentUser={currentUser}
+  {/* =======================================================================
+      1. TOOL VIEWS (Highest rendering priority)
+     ======================================================================= */}
+  {activeTool === 'comms' && (
+    <CommunicationHub
+      messages={messages}
+      decisions={decisions}
+      actionItems={dashboardData?.actionItems || []}
+      githubPrs={githubPrs}
+      currentUser={currentUser}
+    />
+  )}
+
+  {activeTool === 'briefing' && (
+    <DailyBriefing workspaceId={DEFAULT_WORKSPACE} />
+  )}
+
+  {activeTool === 'onboarding' && (
+    <div className="flex flex-col gap-0 bg-white dark:bg-hub-card rounded-xl border border-slate-200 dark:border-hub-border overflow-hidden transition-colors">
+      {/* Header */}
+      <div className="px-6 py-5 border-b border-slate-100 dark:border-hub-border/60 flex items-center gap-3">
+        <div className="p-2 rounded-lg bg-slate-100 dark:bg-hub-bg border border-slate-200 dark:border-hub-border shrink-0">
+          <FileDown className="h-4 w-4 text-glow-indigo" />
+        </div>
+        <div>
+          <h2 className="text-sm font-bold text-slate-800 dark:text-slate-100 tracking-tight">Onboarding PDF Generator</h2>
+          <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">Compile a structured brief for new hires from live workspace data</p>
+        </div>
+      </div>
+
+      {/* Content manifest */}
+      <div className="px-6 py-5 border-b border-slate-100 dark:border-hub-border/60">
+        <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-3">Included in this brief</p>
+        <div className="grid grid-cols-2 gap-2">
+          {([
+            { Icon: Check,          label: 'Key Decisions Log',    desc: 'AI-extracted decisions from Slack & WhatsApp' },
+            { Icon: ClipboardList,  label: 'Active Task List',     desc: 'Sprint tasks with assignees and current status' },
+            { Icon: GitBranch,      label: 'Architecture Context', desc: 'GitHub PRs and linked technical notes' },
+            { Icon: LayoutTemplate, label: 'Project Overview',     desc: 'Goals, deadlines and team composition' },
+          ] as const).map(({ Icon, label, desc }) => (
+            <div key={label} className="flex items-start gap-3 p-3 bg-slate-50 dark:bg-hub-bg/70 rounded-lg border border-slate-100 dark:border-hub-border/50">
+              <div className="mt-0.5 shrink-0 p-1.5 rounded-md bg-white dark:bg-hub-card border border-slate-200 dark:border-hub-border/60">
+                <Icon className="h-3 w-3 text-glow-indigo" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-[11px] font-semibold text-slate-700 dark:text-slate-200 truncate">{label}</p>
+                <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5 leading-snug">{desc}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Generate form */}
+      <div className="px-6 py-5">
+        <form onSubmit={handleGeneratePDF} className="space-y-4">
+          <div>
+            <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-2">New Hire Name</label>
+            <input
+              type="text"
+              placeholder="Full name — e.g. Jane Doe"
+              value={pdfHireName}
+              onChange={(e) => setPdfHireName(e.target.value)}
+              className="w-full bg-slate-50 dark:bg-hub-bg text-sm text-slate-800 dark:text-slate-200 px-3 py-2.5 rounded-lg border border-slate-200 dark:border-hub-border focus:outline-none focus:border-glow-indigo/60 focus:ring-2 focus:ring-glow-indigo/10 placeholder-slate-400 dark:placeholder-slate-600 transition-all"
+              required
             />
-          )}
+            <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1.5">The brief will be personalised with this name on the cover page.</p>
+          </div>
+          <button
+            type="submit"
+            disabled={isPdfGenerating || !pdfHireName}
+            className="w-full flex items-center justify-center gap-2 py-2.5 bg-glow-indigo hover:bg-glow-indigo/90 text-white text-sm font-semibold rounded-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed active:scale-[0.99] shadow-sm shadow-glow-indigo/20"
+          >
+            {isPdfGenerating ? (
+              <>
+                <span className="h-3.5 w-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                <span>Compiling brief...</span>
+              </>
+            ) : (
+              <>
+                <FileDown className="h-3.5 w-3.5" />
+                <span>Download Onboarding PDF</span>
+              </>
+            )}
+          </button>
+        </form>
+      </div>
+    </div>
+  )}
 
-          {activeTool === 'briefing' && (
-            <DailyBriefing workspaceId={DEFAULT_WORKSPACE} />
-          )}
+  {activeTool === 'meetings' && (
+    <MeetingTranscription />
+  )}
 
-          {activeTool === 'onboarding' && (
-            <div className="bg-white dark:bg-hub-card rounded-xl border border-slate-200 dark:border-hub-border p-5 transition-colors">
-              <h2 className="text-sm font-bold text-slate-800 dark:text-slate-400 uppercase tracking-wider mb-3 pb-2 border-b border-slate-100 dark:border-b-hub-border/60 flex items-center space-x-2">
-                <FileDown className="h-4 w-4 text-slate-500 dark:text-slate-400" /><span>Onboarding PDF Generator</span>
-              </h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed mb-4">Compile decisions, architecture constraints, and active project tasks into a formatted PDF brief for new hires.</p>
-              <form onSubmit={handleGeneratePDF} className="space-y-3">
+  {activeTool === 'simulator' && (
+    <div className="flex flex-col gap-0 bg-white dark:bg-hub-card rounded-xl border border-slate-200 dark:border-hub-border overflow-hidden transition-colors">
+      {/* Header */}
+      <div className="px-6 py-5 border-b border-slate-100 dark:border-hub-border/60 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="p-2 rounded-lg bg-slate-100 dark:bg-hub-bg border border-slate-200 dark:border-hub-border shrink-0">
+            <Activity className="h-4 w-4 text-glow-indigo" />
+          </div>
+          <div>
+            <h2 className="text-sm font-bold text-slate-800 dark:text-slate-100 tracking-tight">Event Simulator</h2>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">Inject synthetic events into the real-time processing pipeline</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-100 dark:bg-hub-bg border border-slate-200 dark:border-hub-border">
+          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+          <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Pipeline Active</span>
+        </div>
+      </div>
+
+      {/* Source selector */}
+      <div className="px-6 pt-5 pb-0">
+        <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-3">Select Event Source</p>
+        <div className="grid grid-cols-3 gap-2 mb-5">
+          {([
+            { key: 'slack',    Icon: Hash,           label: 'Slack',    sub: 'Channel message' },
+            { key: 'whatsapp', Icon: Phone,          label: 'WhatsApp', sub: 'Direct message'  },
+            { key: 'github',   Icon: GitPullRequest, label: 'GitHub',   sub: 'Pull request'    },
+          ] as const).map(({ key, Icon, label, sub }) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => { setMockSource(key); setWebhookMessage(null); }}
+              className={`flex items-center gap-3 px-4 py-3 rounded-lg border text-left transition-all ${
+                mockSource === key
+                  ? 'bg-slate-100 dark:bg-hub-bg border-glow-indigo/50 dark:border-glow-indigo/40 shadow-sm'
+                  : 'bg-transparent border-slate-200 dark:border-hub-border hover:bg-slate-50 dark:hover:bg-hub-bg/60'
+              }`}
+            >
+              <div className={`p-1.5 rounded-md shrink-0 ${
+                mockSource === key
+                  ? 'bg-glow-indigo/10 border border-glow-indigo/20'
+                  : 'bg-slate-100 dark:bg-hub-card border border-slate-200 dark:border-hub-border'
+              }`}>
+                <Icon className={`h-3.5 w-3.5 ${mockSource === key ? 'text-glow-indigo' : 'text-slate-400 dark:text-slate-500'}`} />
+              </div>
+              <div className="min-w-0">
+                <p className={`text-xs font-semibold truncate ${mockSource === key ? 'text-slate-800 dark:text-slate-100' : 'text-slate-600 dark:text-slate-400'}`}>{label}</p>
+                <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">{sub}</p>
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="border-t border-slate-100 dark:border-hub-border/60" />
+
+      {/* Form */}
+      <div className="px-6 py-5">
+        <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-4">
+          {mockSource === 'slack' ? 'Slack Message Payload' : mockSource === 'whatsapp' ? 'WhatsApp Message Payload' : 'GitHub Pull Request Payload'}
+        </p>
+        <form onSubmit={handleTriggerWebhook} className="space-y-4">
+          {mockSource !== 'github' && (
+            <>
+              <div className={`grid gap-3 ${mockSource === 'slack' ? 'grid-cols-2' : 'grid-cols-1'}`}>
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">New Hire Name</label>
-                  <input type="text" placeholder="e.g. Jane Doe" value={pdfHireName} onChange={(e) => setPdfHireName(e.target.value)} className="w-full bg-slate-50 dark:bg-hub-bg text-xs text-slate-800 dark:text-slate-200 px-3 py-2 rounded border border-slate-200 dark:border-hub-border focus:outline-none focus:border-slate-400 dark:focus:border-soft-sand" required />
-                </div>
-                <button type="submit" disabled={isPdfGenerating || !pdfHireName} className="w-full bg-slate-800 dark:bg-soft-sand hover:bg-slate-900 dark:hover:bg-slate-200 text-white dark:text-slate-900 text-xs font-bold py-2 rounded transition-colors disabled:opacity-50 flex items-center justify-center space-x-1.5">
-                  {isPdfGenerating ? <span>Generating PDF...</span> : <><FileDown className="h-4 w-4" /><span>Download Onboarding Brief</span></>}
-                </button>
-              </form>
-            </div>
-          )}
-
-          {activeTool === 'meetings' && (
-            <MeetingTranscription />
-          )}
-
-          {activeTool === 'simulator' && (
-            <div className="bg-white dark:bg-hub-card rounded-xl border border-slate-200 dark:border-hub-border p-5 transition-colors">
-              <h2 className="text-sm font-bold text-slate-800 dark:text-slate-400 uppercase tracking-wider mb-3 pb-2 border-b border-slate-100 dark:border-b-hub-border/60 flex items-center space-x-2">
-                <Activity className="h-4 w-4 animate-pulse text-slate-500 dark:text-slate-400" /><span>Webhook Simulator</span>
-              </h2>
-              <div className="grid grid-cols-3 gap-1 mb-4 bg-slate-50 dark:bg-hub-bg p-1 rounded border border-slate-200 dark:border-hub-border">
-                {(['slack', 'whatsapp', 'github'] as const).map(src => (
-                  <button key={src} type="button" onClick={() => { setMockSource(src); setWebhookMessage(null); }}
-                    className={`text-[10px] font-bold py-1 rounded transition-colors uppercase ${mockSource === src ? 'bg-slate-200 dark:bg-hub-border text-slate-800 dark:text-soft-sand' : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'}`}>
-                    {src}
-                  </button>
-                ))}
-              </div>
-              <form onSubmit={handleTriggerWebhook} className="space-y-3">
-                {mockSource !== 'github' && (
-                  <>
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 mb-1">{mockSource === 'whatsapp' ? 'Phone Number (From)' : 'Sender Username'}</label>
-                      <input type="text" value={mockSender} onChange={(e) => setMockSender(e.target.value)} className="w-full bg-slate-50 dark:bg-hub-bg text-xs text-slate-800 dark:text-slate-200 px-2.5 py-1.5 rounded border border-slate-200 dark:border-hub-border focus:outline-none" required />
+                  <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
+                    {mockSource === 'whatsapp' ? 'Phone Number (From)' : 'Sender'}
+                  </label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+                      {mockSource === 'whatsapp'
+                        ? <Phone className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500" />
+                        : <User className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500" />}
                     </div>
-                    {mockSource === 'slack' && (
-                      <div>
-                        <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 mb-1">Slack Channel</label>
-                        <input type="text" value={mockChannel} onChange={(e) => setMockChannel(e.target.value)} className="w-full bg-slate-50 dark:bg-hub-bg text-xs text-slate-800 dark:text-slate-200 px-2.5 py-1.5 rounded border border-slate-200 dark:border-hub-border focus:outline-none" required />
-                      </div>
-                    )}
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 mb-1">Message Content</label>
-                      <textarea value={mockText} onChange={(e) => setMockText(e.target.value)} rows={4} placeholder="Enter chat dialogue..." className="w-full bg-slate-50 dark:bg-hub-bg text-xs text-slate-800 dark:text-slate-200 px-2.5 py-1.5 rounded border border-slate-200 dark:border-hub-border focus:outline-none resize-none" required />
-                    </div>
-                  </>
-                )}
-                {mockSource === 'github' && (
-                  <div className="space-y-2.5">
-                    <div className="grid grid-cols-3 gap-2">
-                      <div className="col-span-1">
-                        <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 mb-1">PR #</label>
-                        <input type="number" value={mockGithubNum} onChange={(e) => setMockGithubNum(Number(e.target.value))} className="w-full bg-slate-50 dark:bg-hub-bg text-xs text-slate-800 dark:text-slate-200 px-2.5 py-1.5 rounded border border-slate-200 dark:border-hub-border focus:outline-none" required />
-                      </div>
-                      <div className="col-span-2">
-                        <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 mb-1">PR Title</label>
-                        <input type="text" value={mockGithubTitle} onChange={(e) => setMockGithubTitle(e.target.value)} className="w-full bg-slate-50 dark:bg-hub-bg text-xs text-slate-800 dark:text-slate-200 px-2.5 py-1.5 rounded border border-slate-200 dark:border-hub-border focus:outline-none" required />
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 mb-1">PR Description</label>
-                      <textarea value={mockGithubDesc} onChange={(e) => setMockGithubDesc(e.target.value)} rows={2} className="w-full bg-slate-50 dark:bg-hub-bg text-xs text-slate-800 dark:text-slate-200 px-2.5 py-1.5 rounded border border-slate-200 dark:border-hub-border focus:outline-none resize-none" />
-                    </div>
-                  </div>
-                )}
-                {webhookMessage && <div className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900 p-2 rounded">{webhookMessage}</div>}
-                <button type="submit" disabled={isWebhookSending} className="w-full bg-slate-100 dark:bg-hub-border hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-100 text-xs font-bold py-2 rounded transition-colors flex items-center justify-center border border-slate-200 dark:border-0">
-                  {isWebhookSending ? 'Sending...' : 'Simulate Event'}
-                </button>
-              </form>
-            </div>
-          )}
-
-          {activeIdea && !activeTool && (
-            <div className="bg-white dark:bg-hub-card rounded-xl border border-slate-200 dark:border-hub-border p-5 flex flex-col gap-4 transition-colors">
-              <div className="flex items-start justify-between pb-3 border-b border-slate-100 dark:border-b-hub-border/60">
-                <div className="flex items-start gap-3">
-                  <div className="p-2 bg-amber-500/10 dark:bg-amber-400/15 rounded-lg border border-amber-300 dark:border-amber-400/30 text-amber-600 dark:text-amber-400 mt-0.5">
-                    <Lightbulb className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">{activeIdea.title}</h2>
-                    <p className="text-[11px] text-slate-400 dark:text-slate-400 uppercase tracking-wider font-bold">Idea Pane</p>
-                  </div>
-                </div>
-                <button onClick={() => setActiveIdea(null)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-100">
-                  <X className="h-5 w-5" />
-                </button>
-              </div>
-
-              <div>
-                <h3 className="text-[11px] font-bold text-slate-400 dark:text-blue-tide uppercase tracking-wider mb-2">Description</h3>
-                <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed bg-slate-50 dark:bg-hub-bg/50 rounded-lg border border-slate-200 dark:border-hub-border/40 p-3 whitespace-pre-wrap">
-                  {activeIdea.description || 'No description provided.'}
-                </p>
-              </div>
-
-              <div>
-                <h3 className="text-[11px] font-bold text-slate-400 dark:text-blue-tide uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                  <Link2 className="h-3.5 w-3.5" /> Similar Ideas
-                </h3>
-                <div className="flex flex-col gap-2 bg-slate-50 dark:bg-hub-bg/50 rounded-lg border border-slate-200 dark:border-hub-border/40 p-3">
-                  {loadingSimilar && <p className="text-[11px] text-slate-500 dark:text-slate-600">Scanning for duplicates...</p>}
-                  {!loadingSimilar && similarIdeas.length === 0 && (
-                    <p className="text-[11px] text-slate-400 dark:text-slate-600">No similar ideas found.</p>
-                  )}
-                  {similarIdeas.map((s: SimilarIdea) => (
-                    <div key={s.id} className="flex items-start justify-between gap-3 bg-white dark:bg-hub-card/60 rounded-lg border border-slate-100 dark:border-hub-border/50 px-3 py-2">
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2 mb-0.5">
-                          <span className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate">{s.title}</span>
-                          <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded shrink-0 ${s.score >= 0.45 ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400' : 'bg-slate-100 dark:bg-hub-border text-slate-600 dark:text-blue-tide'}`}>
-                            {Math.round(s.score * 100)}% match
-                          </span>
-                        </div>
-                        <p className="text-[10px] text-slate-500 line-clamp-2">{s.description}</p>
-                      </div>
-                      <button
-                        onClick={() => handleMergeIdeas(activeIdea.id, s.id, activeIdea.title)}
-                        disabled={mergingId === s.id}
-                        className="shrink-0 flex items-center gap-1 text-[10px] font-bold text-slate-900 bg-soft-sand hover:bg-slate-200 px-2 py-1.5 rounded transition-colors disabled:opacity-50"
-                        title="Merge this duplicate into the current idea"
-                      >
-                        <GitMerge className="h-3 w-3" />
-                        {mergingId === s.id ? '...' : 'Merge'}
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* RELATED MESSAGES — semantic links from Slack/WhatsApp */}
-              <div>
-                <h3 className="text-[11px] font-bold text-slate-400 dark:text-blue-tide uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                  <MessageSquarePlus className="h-3.5 w-3.5" /> Origin Messages
-                </h3>
-                <div className="flex flex-col gap-2 bg-slate-50 dark:bg-hub-bg/50 rounded-lg border border-slate-200 dark:border-hub-border/40 p-3">
-                  {loadingRelated && <p className="text-[11px] text-slate-400 dark:text-slate-600">Finding related messages...</p>}
-                  {!loadingRelated && relatedMessages.length === 0 && (
-                    <p className="text-[11px] text-slate-400 dark:text-slate-600">No related messages found. Send Slack/WhatsApp messages via the simulator to auto-link.</p>
-                  )}
-                  {relatedMessages.map((m, i) => (
-                    <div key={m.id || i} className="flex items-start gap-2.5 bg-white dark:bg-hub-card/60 rounded-lg border border-slate-100 dark:border-hub-border/50 px-3 py-2">
-                      <div className="shrink-0 mt-0.5">
-                        <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold uppercase border ${
-                          m.source === 'slack'
-                            ? 'bg-indigo-100 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border-indigo-200/60 dark:border-indigo-800/40'
-                            : m.source === 'whatsapp'
-                            ? 'bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200/60 dark:border-emerald-800/40'
-                            : 'bg-slate-100 dark:bg-slate-800/60 text-slate-600 dark:text-slate-300 border-slate-200/60 dark:border-slate-700/40'
-                        }`}>{m.source || 'msg'}</span>
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-0.5">
-                          <span className="text-[10px] font-bold text-slate-700 dark:text-slate-300 truncate">{m.sender || 'Unknown'}</span>
-                          <span className="text-[9px] font-mono px-1 py-0.5 rounded bg-slate-100 dark:bg-hub-border text-slate-500 dark:text-blue-tide shrink-0">{Math.round(m.score * 100)}% match</span>
-                        </div>
-                        <p className="text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed line-clamp-3">{m.text}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* LINKED MEETINGS — semantic links from transcribed meeting notes */}
-              <div>
-                <h3 className="text-[11px] font-bold text-slate-400 dark:text-blue-tide uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                  <Mic className="h-3.5 w-3.5" /> Linked Meetings
-                </h3>
-                <div className="flex flex-col gap-2 bg-slate-50 dark:bg-hub-bg/50 rounded-lg border border-slate-200 dark:border-hub-border/40 p-3">
-                  {loadingMeetings && <p className="text-[11px] text-slate-400 dark:text-slate-600">Finding related meetings...</p>}
-                  {!loadingMeetings && relatedMeetings.length === 0 && (
-                    <p className="text-[11px] text-slate-400 dark:text-slate-600">No related meetings found. Record and analyze meetings to auto-link.</p>
-                  )}
-                  {relatedMeetings.map((m) => (
-                    <div key={m.id} className="flex items-start gap-2.5 bg-white dark:bg-hub-card/60 rounded-lg border border-slate-100 dark:border-hub-border/50 px-3 py-2 cursor-pointer hover:border-glow-indigo/40" onClick={() => { setActiveTool('meetings'); setActiveIdea(null); }}>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-0.5">
-                          <span className="text-[10px] font-bold text-slate-700 dark:text-slate-300 truncate">{m.title}</span>
-                          <span className="text-[9px] font-mono px-1 py-0.5 rounded bg-slate-100 dark:bg-hub-border text-slate-500 dark:text-blue-tide shrink-0">{Math.round(m.score * 100)}% match</span>
-                        </div>
-                        <p className="text-[10px] text-slate-500">{new Date(m.created_at).toLocaleDateString()} • {Math.floor(m.duration_seconds / 60)}m</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <h3 className="text-[11px] font-bold text-slate-400 dark:text-blue-tide uppercase tracking-wider mb-2">Comments</h3>
-                <div className="flex flex-col gap-2 bg-slate-50 dark:bg-hub-bg/50 rounded-lg border border-slate-200 dark:border-hub-border/40 p-3">
-                  {(ideaComments[activeIdea.id]?.length || 0) === 0 && (
-                    <p className="text-[11px] text-slate-400 dark:text-slate-600">No comments yet.</p>
-                  )}
-                  {(ideaComments[activeIdea.id] || []).map((c, idx) => (
-                    <div key={idx} className="flex items-start gap-2 text-xs text-slate-700 dark:text-slate-300 bg-white dark:bg-hub-card/60 rounded px-2.5 py-1.5 border border-slate-100 dark:border-0 shadow-sm">
-                      <MessageSquare className="h-3.5 w-3.5 mt-0.5 shrink-0 text-glow-indigo" />
-                      <span className="leading-snug">{c}</span>
-                    </div>
-                  ))}
-                  <div className="flex gap-2 pt-1">
                     <input
                       type="text"
-                      value={ideaDetailCommentDraft}
-                      onChange={(e) => setIdeaDetailCommentDraft(e.target.value)}
-                      onKeyDown={(e) => { if (e.key === 'Enter') addIdeaDetailComment(activeIdea.id); }}
-                      placeholder="Add a comment..."
-                      className="flex-1 bg-white dark:bg-hub-bg text-xs text-slate-800 dark:text-slate-200 px-3 py-2 rounded-lg border border-slate-200 dark:border-hub-border focus:outline-none focus:border-glow-indigo/60 focus:ring-1 focus:ring-glow-indigo/20 transition-all"
+                      value={mockSender}
+                      onChange={(e) => setMockSender(e.target.value)}
+                      placeholder={mockSource === 'whatsapp' ? '+1 555 0100' : '@handle'}
+                      className="w-full bg-slate-50 dark:bg-hub-bg text-sm text-slate-800 dark:text-slate-200 pl-9 pr-3 py-2.5 rounded-lg border border-slate-200 dark:border-hub-border focus:outline-none focus:border-glow-indigo/60 focus:ring-2 focus:ring-glow-indigo/10 placeholder-slate-400 dark:placeholder-slate-600 transition-all"
+                      required
                     />
-                    <button
-                      onClick={() => addIdeaDetailComment(activeIdea.id)}
-                      className="flex items-center gap-1.5 text-xs font-bold text-slate-700 dark:text-slate-900 bg-slate-200 dark:bg-soft-sand hover:bg-slate-300 dark:hover:bg-slate-200 px-3 py-2 rounded-lg transition-colors"
-                    >
-                      <MessageSquarePlus className="h-3.5 w-3.5" /> Add
-                    </button>
+                  </div>
+                </div>
+                {mockSource === 'slack' && (
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Channel</label>
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+                        <Hash className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500" />
+                      </div>
+                      <input
+                        type="text"
+                        value={mockChannel}
+                        onChange={(e) => setMockChannel(e.target.value)}
+                        placeholder="general"
+                        className="w-full bg-slate-50 dark:bg-hub-bg text-sm text-slate-800 dark:text-slate-200 pl-9 pr-3 py-2.5 rounded-lg border border-slate-200 dark:border-hub-border focus:outline-none focus:border-glow-indigo/60 focus:ring-2 focus:ring-glow-indigo/10 placeholder-slate-400 dark:placeholder-slate-600 transition-all"
+                        required
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Message Content</label>
+                <textarea
+                  value={mockText}
+                  onChange={(e) => setMockText(e.target.value)}
+                  rows={5}
+                  placeholder={mockSource === 'slack'
+                    ? 'e.g. We decided to use Postgres for the main database. Alice will handle migrations by Friday.'
+                    : 'e.g. Quick update — the API endpoint is live. Waiting on the frontend team to integrate before EOD.'}
+                  className="w-full bg-slate-50 dark:bg-hub-bg text-sm text-slate-800 dark:text-slate-200 px-3 py-2.5 rounded-lg border border-slate-200 dark:border-hub-border focus:outline-none focus:border-glow-indigo/60 focus:ring-2 focus:ring-glow-indigo/10 placeholder-slate-400 dark:placeholder-slate-600 transition-all resize-none"
+                  required
+                />
+                <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1.5">The AI engine will extract decisions and action items from this message automatically.</p>
+              </div>
+            </>
+          )}
+
+          {mockSource === 'github' && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-4 gap-3">
+                <div className="col-span-1">
+                  <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">PR Number</label>
+                  <input
+                    type="number"
+                    value={mockGithubNum}
+                    onChange={(e) => setMockGithubNum(Number(e.target.value))}
+                    className="w-full bg-slate-50 dark:bg-hub-bg text-sm text-slate-800 dark:text-slate-200 px-3 py-2.5 rounded-lg border border-slate-200 dark:border-hub-border focus:outline-none focus:border-glow-indigo/60 focus:ring-2 focus:ring-glow-indigo/10 transition-all font-mono text-center"
+                    required
+                  />
+                </div>
+                <div className="col-span-3">
+                  <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">PR Title</label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+                      <GitBranch className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500" />
+                    </div>
+                    <input
+                      type="text"
+                      value={mockGithubTitle}
+                      onChange={(e) => setMockGithubTitle(e.target.value)}
+                      placeholder="e.g. feat: add authentication middleware"
+                      className="w-full bg-slate-50 dark:bg-hub-bg text-sm text-slate-800 dark:text-slate-200 pl-9 pr-3 py-2.5 rounded-lg border border-slate-200 dark:border-hub-border focus:outline-none focus:border-glow-indigo/60 focus:ring-2 focus:ring-glow-indigo/10 placeholder-slate-400 dark:placeholder-slate-600 transition-all"
+                      required
+                    />
                   </div>
                 </div>
               </div>
-              <AIAssistantPanel
-                idea={activeIdea}
-                onConvertToProject={() => { setSelectedIdeaForProj(activeIdea); setIsProjectModalOpen(true); }}
-                onAddTask={async (taskTitle) => {
-                  // Find or create project, then add task
-                  const matchingProj = projects.find((p: any) => p.idea_id === activeIdea.id);
-                  if (matchingProj) {
-                    try {
-                      await api.createTask(matchingProj.id, taskTitle, '', DEFAULT_WORKSPACE);
-                      pushToast('success', 'Task Created', `Added brainstormed task to "${matchingProj.title}"`);
-                    } catch (err: any) {
-                      pushToast('warning', 'Error', err.message || 'Could not add task');
-                    }
-                  } else {
-                    pushToast('warning', 'Convert Project First', 'This idea needs to be converted to a project first before adding tasks.');
-                  }
-                }}
-              />
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">PR Description</label>
+                <textarea
+                  value={mockGithubDesc}
+                  onChange={(e) => setMockGithubDesc(e.target.value)}
+                  rows={4}
+                  placeholder="Describe the changes, breaking updates, and testing done..."
+                  className="w-full bg-slate-50 dark:bg-hub-bg text-sm text-slate-800 dark:text-slate-200 px-3 py-2.5 rounded-lg border border-slate-200 dark:border-hub-border focus:outline-none focus:border-glow-indigo/60 focus:ring-2 focus:ring-glow-indigo/10 placeholder-slate-400 dark:placeholder-slate-600 transition-all resize-none"
+                />
+              </div>
             </div>
           )}
 
-          {!activeIdea && !activeTool && (
-            <ProjectWorkspace
-              decisions={decisions}
-              blockers={blockers}
-              tasks={tasks.filter((t: any) => activeProject ? t.project_id === activeProject.id : true)}
-              projects={activeProject ? [activeProject] : projects}
-              users={workspaceUsers}
-              currentUser={currentUser}
-              onAddDeadlineClick={() => {
-                const target = activeProject || (projects.length > 0 ? projects[0] : null);
-                if (target) {
-                  setActiveProject(target);
-                  setProjOwner(target.owner || '');
-                  setProjDeadline(target.deadline || '');
-                  setProjTitle(target.title || '');
-                  setProjDesc(target.description || '');
-                }
-                setSelectedIdeaForProj(null);
-                setIsProjectModalOpen(true);
-              }}
-              onAddTaskClick={() => {
-                const target = activeProject || (projects.length > 0 ? projects[0] : null);
-                if (!target) {
-                  pushToast('warning', 'No Project', 'Convert an idea to a project first before adding tasks.');
-                  return;
-                }
-                setActiveProject(target);
-                setIsTaskModalOpen(true);
-              }}
-              onDeleteProjectClick={handleDeleteProject}
-            />
+          {webhookMessage && (
+            <div className="flex items-center gap-2.5 py-2.5 px-3.5 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800/50 rounded-lg">
+              <Check className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+              <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-400">{webhookMessage}</span>
+            </div>
           )}
 
-        </section>
+          <button
+            type="submit"
+            disabled={isWebhookSending}
+            className="w-full flex items-center justify-center gap-2 py-2.5 bg-glow-indigo hover:bg-glow-indigo/90 text-white text-sm font-semibold rounded-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed active:scale-[0.99] shadow-sm shadow-glow-indigo/20"
+          >
+            {isWebhookSending ? (
+              <>
+                <span className="h-3.5 w-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                <span>Processing event...</span>
+              </>
+            ) : (
+              <>
+                <Send className="h-3.5 w-3.5" />
+                <span>Send to Pipeline</span>
+              </>
+            )}
+          </button>
+        </form>
+      </div>
+    </div>
+  )}
+
+  {/* =======================================================================
+      2. IDEA VIEW PANEL (Only falls through if no tools are actively active)
+     ======================================================================= */}
+  {activeIdea && !activeTool && (
+    <div className="bg-white dark:bg-hub-card rounded-xl border border-slate-200 dark:border-hub-border p-5 flex flex-col gap-4 transition-colors">
+      <div className="flex items-start justify-between pb-3 border-b border-slate-100 dark:border-b-hub-border/60">
+        <div className="flex items-start gap-3">
+          <div className="p-2 bg-amber-500/10 dark:bg-amber-400/15 rounded-lg border border-amber-300 dark:border-amber-400/30 text-amber-600 dark:text-amber-400 mt-0.5">
+            <Lightbulb className="h-5 w-5" />
+          </div>
+          <div>
+            <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">{activeIdea.title}</h2>
+            <p className="text-[11px] text-slate-400 dark:text-slate-400 uppercase tracking-wider font-bold">Idea Pane</p>
+          </div>
+        </div>
+        <button onClick={() => setActiveIdea(null)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-100">
+          <X className="h-5 w-5" />
+        </button>
+      </div>
+
+      <div>
+        <h3 className="text-[11px] font-bold text-slate-400 dark:text-blue-tide uppercase tracking-wider mb-2">Description</h3>
+        <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed bg-slate-50 dark:bg-hub-bg/50 rounded-lg border border-slate-200 dark:border-hub-border/40 p-3 whitespace-pre-wrap">
+          {activeIdea.description || 'No description provided.'}
+        </p>
+      </div>
+
+      <div>
+        <h3 className="text-[11px] font-bold text-slate-400 dark:text-blue-tide uppercase tracking-wider mb-2 flex items-center gap-1.5">
+          <Link2 className="h-3.5 w-3.5" /> Similar Ideas
+        </h3>
+        <div className="flex flex-col gap-2 bg-slate-50 dark:bg-hub-bg/50 rounded-lg border border-slate-200 dark:border-hub-border/40 p-3">
+          {loadingSimilar && <p className="text-[11px] text-slate-500 dark:text-slate-600">Scanning for duplicates...</p>}
+          {!loadingSimilar && similarIdeas.length === 0 && (
+            <p className="text-[11px] text-slate-400 dark:text-slate-600">No similar ideas found.</p>
+          )}
+          {similarIdeas.map((s: SimilarIdea) => (
+            <div key={s.id} className="flex items-start justify-between gap-3 bg-white dark:bg-hub-card/60 rounded-lg border border-slate-100 dark:border-hub-border/50 px-3 py-2">
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2 mb-0.5">
+                  <span className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate">{s.title}</span>
+                  <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded shrink-0 ${s.score >= 0.45 ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400' : 'bg-slate-100 dark:bg-hub-border text-slate-600 dark:text-blue-tide'}`}>
+                    {Math.round(s.score * 100)}% match
+                  </span>
+                </div>
+                <p className="text-[10px] text-slate-500 line-clamp-2">{s.description}</p>
+              </div>
+              <button
+                onClick={() => handleMergeIdeas(activeIdea.id, s.id, activeIdea.title)}
+                disabled={mergingId === s.id}
+                className="shrink-0 flex items-center gap-1 text-[10px] font-bold text-slate-900 bg-soft-sand hover:bg-slate-200 px-2 py-1.5 rounded transition-colors disabled:opacity-50"
+                title="Merge this duplicate into the current idea"
+              >
+                <GitMerge className="h-3 w-3" />
+                {mergingId === s.id ? '...' : 'Merge'}
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* RELATED MESSAGES */}
+      <div>
+        <h3 className="text-[11px] font-bold text-slate-400 dark:text-blue-tide uppercase tracking-wider mb-2 flex items-center gap-1.5">
+          <MessageSquarePlus className="h-3.5 w-3.5" /> Origin Messages
+        </h3>
+        <div className="flex flex-col gap-2 bg-slate-50 dark:bg-hub-bg/50 rounded-lg border border-slate-200 dark:border-hub-border/40 p-3">
+          {loadingRelated && <p className="text-[11px] text-slate-400 dark:text-slate-600">Finding related messages...</p>}
+          {!loadingRelated && relatedMessages.length === 0 && (
+            <p className="text-[11px] text-slate-400 dark:text-slate-600">No related messages found. Send Slack/WhatsApp messages via the simulator to auto-link.</p>
+          )}
+          {relatedMessages.map((m, i) => (
+            <div key={m.id || i} className="flex items-start gap-2.5 bg-white dark:bg-hub-card/60 rounded-lg border border-slate-100 dark:border-hub-border/50 px-3 py-2">
+              <div className="shrink-0 mt-0.5">
+                <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold uppercase border ${
+                  m.source === 'slack'
+                    ? 'bg-indigo-100 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border-indigo-200/60 dark:border-indigo-800/40'
+                    : m.source === 'whatsapp'
+                    ? 'bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200/60 dark:border-emerald-800/40'
+                    : 'bg-slate-100 dark:bg-slate-800/60 text-slate-600 dark:text-slate-300 border-slate-200/60 dark:border-slate-700/40'
+                }`}>{m.source || 'msg'}</span>
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-0.5">
+                  <span className="text-[10px] font-bold text-slate-700 dark:text-slate-300 truncate">{m.sender || 'Unknown'}</span>
+                  <span className="text-[9px] font-mono px-1 py-0.5 rounded bg-slate-100 dark:bg-hub-border text-slate-500 dark:text-blue-tide shrink-0">{Math.round(m.score * 100)}% match</span>
+                </div>
+                <p className="text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed line-clamp-3">{m.text}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* LINKED MEETINGS */}
+      <div>
+        <h3 className="text-[11px] font-bold text-slate-400 dark:text-blue-tide uppercase tracking-wider mb-2 flex items-center gap-1.5">
+          <Mic className="h-3.5 w-3.5" /> Linked Meetings
+        </h3>
+        <div className="flex flex-col gap-2 bg-slate-50 dark:bg-hub-bg/50 rounded-lg border border-slate-200 dark:border-hub-border/40 p-3">
+          {loadingMeetings && <p className="text-[11px] text-slate-400 dark:text-slate-600">Finding related meetings...</p>}
+          {!loadingMeetings && relatedMeetings.length === 0 && (
+            <p className="text-[11px] text-slate-400 dark:text-slate-600">No related meetings found. Record and analyze meetings to auto-link.</p>
+          )}
+          {relatedMeetings.map((m) => (
+            <div key={m.id} className="flex items-start gap-2.5 bg-white dark:bg-hub-card/60 rounded-lg border border-slate-100 dark:border-hub-border/50 px-3 py-2 cursor-pointer hover:border-glow-indigo/40" onClick={() => { setActiveTool('meetings'); setActiveIdea(null); }}>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-0.5">
+                  <span className="text-[10px] font-bold text-slate-700 dark:text-slate-300 truncate">{m.title}</span>
+                  <span className="text-[9px] font-mono px-1 py-0.5 rounded bg-slate-100 dark:bg-hub-border text-slate-500 dark:text-blue-tide shrink-0">{Math.round(m.score * 100)}% match</span>
+                </div>
+                <p className="text-[10px] text-slate-500">{new Date(m.created_at).toLocaleDateString()} • {Math.floor(m.duration_seconds / 60)}m</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* COMMENTS */}
+      <div>
+        <h3 className="text-[11px] font-bold text-slate-400 dark:text-blue-tide uppercase tracking-wider mb-2">Comments</h3>
+        <div className="flex flex-col gap-2 bg-slate-50 dark:bg-hub-bg/50 rounded-lg border border-slate-200 dark:border-hub-border/40 p-3">
+          {(ideaComments[activeIdea.id]?.length || 0) === 0 && (
+            <p className="text-[11px] text-slate-400 dark:text-slate-600">No comments yet.</p>
+          )}
+          {(ideaComments[activeIdea.id] || []).map((c, idx) => (
+            <div key={idx} className="flex items-start gap-2 text-xs text-slate-700 dark:text-slate-300 bg-white dark:bg-hub-card/60 rounded px-2.5 py-1.5 border border-slate-100 dark:border-0 shadow-sm">
+              <MessageSquare className="h-3.5 w-3.5 mt-0.5 shrink-0 text-glow-indigo" />
+              <span className="leading-snug">{c}</span>
+            </div>
+          ))}
+          <div className="flex gap-2 pt-1">
+            <input
+              type="text"
+              value={ideaDetailCommentDraft}
+              onChange={(e) => setIdeaDetailCommentDraft(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') addIdeaDetailComment(activeIdea.id); }}
+              placeholder="Add a comment..."
+              className="flex-1 bg-white dark:bg-hub-bg text-xs text-slate-800 dark:text-slate-200 px-3 py-2 rounded-lg border border-slate-200 dark:border-hub-border focus:outline-none focus:border-glow-indigo/60 focus:ring-1 focus:ring-glow-indigo/20 transition-all"
+            />
+            <button
+              onClick={() => addIdeaDetailComment(activeIdea.id)}
+              className="flex items-center gap-1.5 text-xs font-bold text-slate-700 dark:text-slate-900 bg-slate-200 dark:bg-soft-sand hover:bg-slate-300 dark:hover:bg-slate-200 px-3 py-2 rounded-lg transition-colors"
+            >
+              <MessageSquarePlus className="h-3.5 w-3.5" /> Add
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <AIAssistantPanel
+        idea={activeIdea}
+        onConvertToProject={() => { setSelectedIdeaForProj(activeIdea); setIsProjectModalOpen(true); }}
+        onAddTask={async (taskTitle) => {
+          const matchingProj = projects.find((p: any) => p.idea_id === activeIdea.id);
+          if (matchingProj) {
+            try {
+              await api.createTask(matchingProj.id, taskTitle, '', DEFAULT_WORKSPACE);
+              pushToast('success', 'Task Created', `Added brainstormed task to "${matchingProj.title}"`);
+            } catch (err: any) {
+              pushToast('warning', 'Error', err.message || 'Could not add task');
+            }
+          } else {
+            pushToast('warning', 'Convert Project First', 'This idea needs to be converted to a project first before adding tasks.');
+          }
+        }}
+      />
+    </div>
+  )}
+
+  {/* =======================================================================
+      3. PROJECT WORKSPACE VIEW (Fallback layer — handles scoped state routing)
+     ======================================================================= */}
+  {!activeIdea && !activeTool && (
+    <ProjectWorkspace
+      decisions={decisions}
+      blockers={blockers}
+      tasks={tasks.filter((t: any) => activeProject ? t.project_id === activeProject.id : true)}
+      // FIX: Strictly scope the dashboard array context so it updates when switching projects
+      projects={activeProject ? [activeProject] : (projects.length > 0 ? [projects[0]] : [])}
+      users={workspaceUsers}
+      currentUser={currentUser}
+      onAddDeadlineClick={() => {
+        const target = activeProject || (projects.length > 0 ? projects[0] : null);
+        if (target) {
+          setActiveProject(target);
+          setProjOwner(target.owner || '');
+          setProjDeadline(target.deadline || '');
+          setProjTitle(target.title || '');
+          setProjDesc(target.description || '');
+        }
+        setSelectedIdeaForProj(null);
+        setIsProjectModalOpen(true);
+      }}
+      onAddTaskClick={() => {
+        const target = activeProject || (projects.length > 0 ? projects[0] : null);
+        if (!target) {
+          pushToast('warning', 'No Project', 'Convert an idea to a project first before adding tasks.');
+          return;
+        }
+        setActiveProject(target);
+        setIsTaskModalOpen(true);
+      }}
+      onDeleteProjectClick={handleDeleteProject}
+    />
+  )}
+
+</section>
 
       </main>
 

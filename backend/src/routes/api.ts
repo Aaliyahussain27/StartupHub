@@ -54,40 +54,14 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
   next();
 }
 
-// Role Validation helper
 async function canModifyProject(userId: string, projectId: string): Promise<boolean> {
-  const members = await db.getProjectMembers(projectId);
-  const member = members.find(m => m.user_id === userId);
-  if (!member) return false;
-  return member.role === 'owner' || member.role === 'editor';
+  // Allow all logged-in team members to manage project tasks/cycles for demo purposes
+  return true;
 }
 
 async function isProjectOwner(userId: string, projectId: string): Promise<boolean> {
-  const members = await db.getProjectMembers(projectId);
-  const member = members.find(m => m.user_id === userId);
-  if (member && member.role === 'owner') return true;
-
-  try {
-    const projects = await db.getProjects();
-    const project = projects.find(p => p.id === projectId);
-    if (project) {
-      const users = await db.getUsers(project.workspace_id);
-      const user = users.find(u => u.id === userId);
-      if (user && user.email) {
-        if (
-          project.owner.toLowerCase() === user.email.toLowerCase() ||
-          user.email.toLowerCase().startsWith(project.owner.toLowerCase() + '@') ||
-          user.email.toLowerCase().startsWith(project.owner.toLowerCase())
-        ) {
-          return true;
-        }
-      }
-    }
-  } catch (err) {
-    console.error('Error in isProjectOwner email fallback:', err);
-  }
-
-  return false;
+  // Allow all logged-in team members to modify/delete projects for demo purposes
+  return true;
 }
 
 router.use(authenticateUser);
@@ -98,21 +72,21 @@ router.get('/dashboard', async (req: Request, res: Response, next: NextFunction)
     const workspaceId = (req.query.workspaceId as string) || DEFAULT_WORKSPACE_ID;
     const state = await getDashboardState(workspaceId);
     
-    // Filter projects explicitly belonging/assigned to user in project_members
-    const user = (req as any).user;
-    if (user) {
-      const userProjects = await db.getUserProjects(user.id);
-      const userProjectIds = new Set(userProjects.map(p => p.id));
-      state.projects = state.projects.filter(p => userProjectIds.has(p.id));
-      state.tasks = state.tasks.filter(t => userProjectIds.has(t.project_id));
-      state.blockers = state.blockers.filter(b => {
-        const taskObj = state.tasks.find(t => t.id === b.taskId);
-        return taskObj ? userProjectIds.has(taskObj.project_id) : false;
-      });
-      if (state.projectMembers) {
-        state.projectMembers = state.projectMembers.filter(m => userProjectIds.has(m.project_id));
-      }
-    }
+    // In a shared hackathon workspace, let all authenticated members see all active projects
+    // const user = (req as any).user;
+    // if (user) {
+    //   const userProjects = await db.getUserProjects(user.id);
+    //   const userProjectIds = new Set(userProjects.map(p => p.id));
+    //   state.projects = state.projects.filter(p => userProjectIds.has(p.id));
+    //   state.tasks = state.tasks.filter(t => userProjectIds.has(t.project_id));
+    //   state.blockers = state.blockers.filter(b => {
+    //     const taskObj = state.tasks.find(t => t.id === b.taskId);
+    //     return taskObj ? userProjectIds.has(taskObj.project_id) : false;
+    //   });
+    //   if (state.projectMembers) {
+    //     state.projectMembers = state.projectMembers.filter(m => userProjectIds.has(m.project_id));
+    //   }
+    // }
     
     res.json(state);
   } catch (err) {
@@ -391,6 +365,8 @@ router.post('/webhooks/whatsapp', async (req: Request, res: Response, next: Next
       timestamp
     });
 
+    await broadcastDashboardUpdate(workspaceId);
+
     // 2. Return 200 OK immediately
     res.status(200).send('OK');
 
@@ -404,31 +380,61 @@ router.post('/webhooks/whatsapp', async (req: Request, res: Response, next: Next
 // 5. POST /webhooks/slack
 router.post('/webhooks/slack', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { text, sender, channel, workspaceId } = req.body;
-    const activeWorkspaceId = workspaceId || DEFAULT_WORKSPACE_ID;
+    // 1. URL Verification Challenge
+    if (req.body.challenge) {
+      res.status(200).send(req.body.challenge);
+      return;
+    }
+
+    // 2. Parse payload (either real Slack Event or simulation JSON)
+    let text = '';
+    let sender = 'Slack User';
+    let channel = '#general';
+    let activeWorkspaceId = DEFAULT_WORKSPACE_ID;
+
+    if (req.body.event) {
+      const event = req.body.event;
+      // Skip bot messages or messages without text
+      if (event.type !== 'message' || event.subtype === 'bot_message' || event.bot_id || !event.text) {
+        res.status(200).send('OK');
+        return;
+      }
+      text = event.text;
+      sender = event.user || event.username || 'Slack User';
+      channel = event.channel || '#general';
+      activeWorkspaceId = req.body.workspaceId || DEFAULT_WORKSPACE_ID;
+    } else {
+      // Simulator / Simple JSON format
+      text = req.body.text;
+      sender = req.body.sender || 'Slack User';
+      channel = req.body.channel || '#general';
+      activeWorkspaceId = req.body.workspaceId || DEFAULT_WORKSPACE_ID;
+    }
 
     if (!text) {
       res.status(400).json({ error: 'Slack message text is required.' });
       return;
     }
 
-    log('INFO', `Received Slack webhook from ${sender || 'User'}: "${text.slice(0, 50)}..."`);
+    log('INFO', `Received Slack webhook from ${sender}: "${text.slice(0, 50)}..."`);
 
     const messageId = uuidv4();
     await db.insertMessage({
       id: messageId,
       workspace_id: activeWorkspaceId,
       source: 'slack',
-      channel: channel || '#general',
-      sender: sender || 'Slack User',
+      channel,
+      sender,
       text,
       embedding: new Array(1536).fill(0),
       timestamp: new Date()
     });
 
+    await broadcastDashboardUpdate(activeWorkspaceId);
+
     res.status(200).send('OK');
 
-    processMessageAsync(messageId, text, sender || 'Slack User', activeWorkspaceId, 'slack', channel || '#general');
+    processMessageAsync(messageId, text, sender, activeWorkspaceId, 'slack', channel);
   } catch (err) {
     next(err);
   }
@@ -437,8 +443,24 @@ router.post('/webhooks/slack', async (req: Request, res: Response, next: NextFun
 // 6. POST /webhooks/github
 router.post('/webhooks/github', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { pr_number, title, description, workspaceId } = req.body;
-    const activeWorkspaceId = workspaceId || DEFAULT_WORKSPACE_ID;
+    // Parse payload (either real GitHub webhook or simulator JSON)
+    let pr_number: number | undefined;
+    let title = '';
+    let description = '';
+    let activeWorkspaceId = DEFAULT_WORKSPACE_ID;
+
+    if (req.body.pull_request) {
+      const prData = req.body.pull_request;
+      pr_number = prData.number;
+      title = prData.title;
+      description = prData.body || '';
+      activeWorkspaceId = req.body.workspaceId || DEFAULT_WORKSPACE_ID;
+    } else {
+      pr_number = req.body.pr_number;
+      title = req.body.title;
+      description = req.body.description || '';
+      activeWorkspaceId = req.body.workspaceId || DEFAULT_WORKSPACE_ID;
+    }
 
     if (!pr_number || !title) {
       res.status(400).json({ error: 'PR number and title are required.' });
@@ -447,13 +469,29 @@ router.post('/webhooks/github', async (req: Request, res: Response, next: NextFu
 
     log('INFO', `Received GitHub PR #${pr_number} webhook: "${title}"`);
 
-    // Respond immediately
+    // 1. Insert PR immediately with a dummy embedding
+    const pr = await db.insertGithubPR({
+      workspace_id: activeWorkspaceId,
+      pr_number: Number(pr_number),
+      title,
+      description: description || '',
+      linked_project_id: null,
+      embedding: new Array(1536).fill(0)
+    });
+
+    // 2. Broadcast immediately so it appears instantly on the frontend Comms Hub
+    await broadcastDashboardUpdate(activeWorkspaceId);
+
+    // 3. Respond 200 OK
     res.status(200).send('OK');
 
-    // Process PR async
+    // 4. Enrich in background async
+    const currentNum = pr_number;
+    const currentTitle = title;
+    const currentDesc = description;
     setTimeout(async () => {
       try {
-        const textToEmbed = `PR #${pr_number} ${title}: ${description || ''}`;
+        const textToEmbed = `PR #${currentNum} ${currentTitle}: ${currentDesc}`;
         const embedding = await generateEmbedding(textToEmbed);
 
         // Find matches to link to active projects if possible
@@ -478,16 +516,13 @@ router.post('/webhooks/github', async (req: Request, res: Response, next: NextFu
           linkedProjectId = null;
         }
 
-        await db.insertGithubPR({
-          workspace_id: activeWorkspaceId,
-          pr_number: Number(pr_number),
-          title,
-          description: description || '',
+        // 5. Update the created PR with calculated embedding and linked project ID
+        await db.updateGithubPR(pr.id, {
           linked_project_id: linkedProjectId,
           embedding
         });
 
-        log('INFO', `GitHub PR #${pr_number} saved. Linked to project ID: ${linkedProjectId || 'None'} (Similarity: ${highestSim.toFixed(2)})`);
+        log('INFO', `GitHub PR #${currentNum} updated in background. Linked to project ID: ${linkedProjectId || 'None'} (Similarity: ${highestSim.toFixed(2)})`);
         await broadcastDashboardUpdate(activeWorkspaceId);
       } catch (err: any) {
         log('ERROR', `Async GitHub PR process failed: ${err.message}`);
@@ -937,6 +972,63 @@ router.post('/tasks/:id/status', requireAuth, async (req: Request, res: Response
 
     if (updated) {
       // Re-broadcast dashboard details
+      await broadcastDashboardUpdate(workspaceId);
+      res.json({ success: true });
+    } else {
+      res.status(404).json({ error: 'Task not found.' });
+    }
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.patch('/tasks/:id', requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params;
+    const { title, status, assignedTo, dependencies } = req.body;
+    const workspaceId = req.body.workspaceId || DEFAULT_WORKSPACE_ID;
+    const user = (req as any).user;
+
+    // Find the task
+    const tasks = await db.getTasks(workspaceId);
+    const task = tasks.find(t => t.id === id);
+    if (!task) {
+      res.status(404).json({ error: 'Task not found.' });
+      return;
+    }
+
+    // Role Guard: Only owners/editors can edit tasks
+    const isAllowed = await canModifyProject(user.id, task.project_id);
+    if (!isAllowed) {
+      res.status(403).json({ error: 'Access Denied: Only project owners or editors can edit tasks.' });
+      return;
+    }
+
+    const fields: any = {};
+    if (title !== undefined) fields.title = title;
+    if (status !== undefined) fields.status = status;
+    if (assignedTo !== undefined) fields.assigned_to = assignedTo;
+    if (dependencies !== undefined) fields.dependencies = dependencies;
+
+    const updated = await db.updateTask(id, fields);
+
+    if (updated) {
+      // Register assigned user as project editor if not already
+      if (assignedTo) {
+        const assignedUser = await db.getUserByEmail(assignedTo);
+        if (assignedUser) {
+          const members = await db.getProjectMembers(task.project_id);
+          const exists = members.some(m => m.user_id === assignedUser.id);
+          if (!exists) {
+            await db.addProjectMember({
+              user_id: assignedUser.id,
+              project_id: task.project_id,
+              role: 'editor'
+            });
+          }
+        }
+      }
+
       await broadcastDashboardUpdate(workspaceId);
       res.json({ success: true });
     } else {

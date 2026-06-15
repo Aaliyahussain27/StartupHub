@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { 
   Folder, Plus, Sparkles, AlertTriangle, Check, ListChecks, Lock, 
   Clock, CheckCircle, Circle, Ban, X, ChevronDown, ChevronRight, MessageSquare,
-  Settings, Trash2
+  Settings, Trash2, Send
 } from 'lucide-react';
 import { api } from '../services/api';
 
@@ -67,6 +67,7 @@ interface ProjectWorkspaceProps {
   onAddDeadlineClick?: () => void;
   onAddTaskClick?: () => void;
   onDeleteProjectClick?: (projectId: string) => void;
+  onNudgeUser?: (userEmail: string, taskTitle: string) => void;
 }
 
 export function ProjectWorkspace({ 
@@ -74,10 +75,12 @@ export function ProjectWorkspace({
   blockers = [], 
   tasks = [], 
   projects = [],
+  users = [],
   currentUser,
   onAddDeadlineClick,
   onAddTaskClick,
-  onDeleteProjectClick
+  onDeleteProjectClick,
+  onNudgeUser
 }: ProjectWorkspaceProps) {
   const [modal, setModal] = useState<string | null>(null);
   const [localDeadline, setLocalDeadline] = useState<string>('');
@@ -106,15 +109,9 @@ export function ProjectWorkspace({
 
   const projectInstance = projects[0] || { id: 'p1', title: 'StartupHub Core', status: 'active', activeSince: '2026-06-10', deadline: '', owner: 'Ovee' };
 
-  const isOwner = !!(
-    currentUser &&
-    projectInstance.owner &&
-    (
-      projectInstance.owner.toLowerCase() === currentUser.email?.toLowerCase() ||
-      currentUser.email?.toLowerCase().startsWith(projectInstance.owner.toLowerCase()) ||
-      (projectInstance.owner.includes('@') && projectInstance.owner.toLowerCase() === currentUser.email?.toLowerCase()) ||
-      (!projectInstance.owner.includes('@') && currentUser.email?.toLowerCase().startsWith(projectInstance.owner.toLowerCase() + '@'))
-    )
+  const isOwner = !!currentUser && (
+    projectInstance.owner === currentUser.email ||
+    projectInstance.created_by === currentUser.id
   );
   
   // Sync deadline from project data on first load
@@ -123,14 +120,34 @@ export function ProjectWorkspace({
   // Dynamically build blockers, decisions, and tasks list mapping to DetailItem schema
   const activeBlockersList: DetailItem[] = blockers.map((b: any, index: number) => {
     const taskObj = tasks.find(t => t.id === b.taskId);
+    
+    // Find who we are waiting on
+    const waitingOnAssignees: string[] = [];
+    if (taskObj && taskObj.dependencies) {
+      taskObj.dependencies.forEach((depId: string) => {
+        const depTask = tasks.find(t => t.id === depId);
+        if (depTask && depTask.status !== 'done' && depTask.assigned_to) {
+          waitingOnAssignees.push(`${depTask.assigned_to} (for "${depTask.title}")`);
+        }
+      });
+    }
+
+    const waitingOnText = waitingOnAssignees.length > 0 
+      ? `Waiting on: ${waitingOnAssignees.join(', ')}` 
+      : '';
+
+    // Check if updated_at is more than 24 hours ago
+    const oneDayAgo = Date.now() - 24 * 3600000;
+    const isEscalated = !!(taskObj && taskObj.updated_at && new Date(taskObj.updated_at).getTime() < oneDayAgo);
+
     return {
       id: b.taskId || `block-${index}`,
       icon: 'blocker',
       title: taskObj ? `Task Blocked: ${taskObj.title}` : 'Dependency Blocker',
       meta: taskObj ? `Assigned to ${taskObj.assigned_to} · Flagged ${new Date(taskObj.updated_at || Date.now()).toLocaleDateString()}` : 'System detected blocker',
-      body: b.reason || 'Circular dependency or missing requirements preventing progress.',
-      status: 'blocked',
-      statusType: 'warn',
+      body: `${b.reason || 'Circular dependency or missing requirements.'} ${waitingOnText ? `\n\n👉 ${waitingOnText}` : ''}`,
+      status: isEscalated ? 'escalated (24h+)' : 'blocked',
+      statusType: isEscalated ? 'danger' : 'warn',
       assignedTo: taskObj ? taskObj.assigned_to : 'Unassigned',
       rootCause: b.reason,
       resolution: 'Resolve the blocked dependencies or cycle to continue.',
@@ -200,6 +217,20 @@ export function ProjectWorkspace({
       items: activeTasksList
     }
   };
+
+  if (projects.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full p-8 text-center bg-transparent">
+        <div className="p-4 bg-slate-50 dark:bg-slate-900/50 rounded-full border border-slate-200 dark:border-slate-800 mb-4 animate-pulse">
+          <Folder className="h-12 w-12 text-slate-400 dark:text-slate-500" />
+        </div>
+        <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider mb-2">No Active Projects</h3>
+        <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm leading-relaxed">
+          You haven't converted any ideas to projects yet. Go to the Ideas panel, select an inbox idea, and click the "Convert to Project" button to bootstrap your team roadmap.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-full bg-transparent relative">
@@ -343,13 +374,18 @@ export function ProjectWorkspace({
               <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 group-hover:text-glow-indigo transition-colors">click to expand</span>
             </div>
             <div className="space-y-2 relative z-10">
-              {activeBlockersList.slice(0, 3).map((item, i) => (
-                <div key={i} className="flex items-center gap-2.5 py-2 px-2.5 rounded-xl border border-slate-100/40 dark:border-hub-border/30 bg-slate-50/50 dark:bg-[#070a13]/30 text-xs text-slate-700 dark:text-slate-300 hover:bg-slate-100/50 dark:hover:bg-hub-bg/40 transition-all duration-200">
-                  <Lock className="h-3.5 w-3.5 text-amber-600 shrink-0" />
-                  <span className="flex-1 truncate font-medium">{item.title}</span>
-                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100/80 dark:bg-amber-950/35 text-amber-600 dark:text-amber-400 font-bold border border-amber-200/40 dark:border-amber-900/30">blocked</span>
-                </div>
-              ))}
+              {activeBlockersList.slice(0, 3).map((item, i) => {
+                const isEscalated = item.statusType === 'danger';
+                return (
+                  <div key={i} className={`flex items-center gap-2.5 py-2 px-2.5 rounded-xl border ${isEscalated ? 'border-rose-200/40 dark:border-rose-900/35 bg-rose-50/10 dark:bg-rose-950/10' : 'border-slate-100/40 dark:border-hub-border/30 bg-slate-50/50 dark:bg-[#070a13]/30'} text-xs text-slate-700 dark:text-slate-300 hover:bg-slate-100/50 dark:hover:bg-hub-bg/40 transition-all duration-200`}>
+                    <Lock className={`h-3.5 w-3.5 shrink-0 ${isEscalated ? 'text-rose-500 animate-pulse animate-duration-1000' : 'text-amber-600'}`} />
+                    <span className="flex-1 truncate font-medium">{item.title}</span>
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold border ${isEscalated ? 'bg-rose-100/80 dark:bg-rose-950/35 text-rose-600 dark:text-rose-400 border-rose-200/40 dark:border-rose-900/30' : 'bg-amber-100/80 dark:bg-amber-950/35 text-amber-600 dark:text-amber-400 border-amber-200/40 dark:border-amber-900/30'}`}>
+                      {item.status}
+                    </span>
+                  </div>
+                );
+              })}
               {activeBlockersList.length === 0 && (
                 <p className="text-xs text-slate-400 dark:text-slate-500 py-3 text-center italic">No active blockers flagged.</p>
               )}
@@ -472,27 +508,85 @@ export function ProjectWorkspace({
                           </div>
                         )}
 
-                        {/* Task Status controls */}
-                        {modal === 'tasks' && (
-                          <div className="flex items-center gap-3 mt-4 pt-3 border-t border-slate-100 dark:border-slate-800/40">
-                            <span className="text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500 tracking-wider">Update Status:</span>
-                            <select
-                              value={item.status}
-                              onChange={async (e) => {
-                                const newStatus = e.target.value;
-                                try {
-                                  await api.updateTaskStatus(item.id, newStatus, '00000000-0000-0000-0000-000000000000');
-                                } catch (err: any) {
-                                  alert(err.message || 'Failed to update task status');
-                                }
+                        {modal === 'blockers' && item.assignedTo && item.assignedTo !== 'Unassigned' && (
+                          <div className="flex justify-end pt-1">
+                            <button
+                              onClick={() => {
+                                onNudgeUser?.(item.assignedTo!, item.title.replace('Task Blocked: ', ''));
                               }}
-                              className="bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-800 rounded-lg text-[11px] px-2.5 py-1.5 focus:outline-none focus:border-glow-indigo/50 transition-colors"
+                              className="flex items-center gap-1.5 text-[10px] font-bold bg-amber-500 hover:bg-amber-600 dark:bg-amber-600 dark:hover:bg-amber-700 text-white dark:text-slate-100 px-3 py-1.5 rounded-lg transition-all active:scale-95 shadow-md shadow-amber-500/10"
                             >
-                              <option value="todo">To Do</option>
-                              <option value="in_progress">In Progress</option>
-                              <option value="blocked">Blocked</option>
-                              <option value="done">Done</option>
-                            </select>
+                              <Send className="h-3 w-3" />
+                              Nudge {item.assignedTo} (Ping Slack)
+                            </button>
+                          </div>
+                        )}
+
+                        {/* Task Status & Editing controls */}
+                        {modal === 'tasks' && (
+                          <div className="flex flex-col gap-3 mt-4 pt-3 border-t border-slate-100 dark:border-slate-800/40">
+                            <div className="flex items-center gap-3 flex-wrap">
+                              <div className="flex flex-col gap-1">
+                                <span className="text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500 tracking-wider">Status:</span>
+                                <select
+                                  value={item.status}
+                                  onChange={async (e) => {
+                                    const newStatus = e.target.value;
+                                    try {
+                                      await api.updateTask(item.id, { status: newStatus }, '00000000-0000-0000-0000-000000000000');
+                                    } catch (err: any) {
+                                      alert(err.message || 'Failed to update task status');
+                                    }
+                                  }}
+                                  className="bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-800 rounded-lg text-[11px] px-2.5 py-1.5 focus:outline-none focus:border-glow-indigo/50 transition-colors"
+                                >
+                                  <option value="todo">To Do</option>
+                                  <option value="in_progress">In Progress</option>
+                                  <option value="blocked">Blocked</option>
+                                  <option value="done">Done</option>
+                                </select>
+                              </div>
+
+                              <div className="flex flex-col gap-1">
+                                <span className="text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500 tracking-wider">Assign To:</span>
+                                <select
+                                  value={item.assignedTo || ''}
+                                  onChange={async (e) => {
+                                    const newAssignee = e.target.value;
+                                    try {
+                                      await api.updateTask(item.id, { assignedTo: newAssignee }, '00000000-0000-0000-0000-000000000000');
+                                    } catch (err: any) {
+                                      alert(err.message || 'Failed to update task assignee');
+                                    }
+                                  }}
+                                  className="bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-800 rounded-lg text-[11px] px-2.5 py-1.5 focus:outline-none focus:border-glow-indigo/50 transition-colors"
+                                >
+                                  <option value="">Unassigned</option>
+                                  {users.map((u: any) => (
+                                    <option key={u.id} value={u.email}>{u.email}</option>
+                                  ))}
+                                </select>
+                              </div>
+
+                              <div className="flex-1 flex flex-col gap-1 min-w-[200px]">
+                                <span className="text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500 tracking-wider">Task Title:</span>
+                                <input
+                                  type="text"
+                                  defaultValue={item.title}
+                                  onBlur={async (e) => {
+                                    const newTitle = e.target.value;
+                                    if (newTitle.trim() && newTitle !== item.title) {
+                                      try {
+                                        await api.updateTask(item.id, { title: newTitle }, '00000000-0000-0000-0000-000000000000');
+                                      } catch (err: any) {
+                                        alert(err.message || 'Failed to update task title');
+                                      }
+                                    }
+                                  }}
+                                  className="bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-800 rounded-lg text-[11px] px-2.5 py-1.5 focus:outline-none focus:border-glow-indigo/50 transition-colors"
+                                />
+                              </div>
+                            </div>
                           </div>
                         )}
 
