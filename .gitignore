@@ -1,5 +1,6 @@
 # Dependencies
 node_modules/
+cursor_overall_project_report.md
 
 # Local databases
 db_fallback.json

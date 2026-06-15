@@ -10,7 +10,8 @@ import {
   Idea,
   Project,
   Task,
-  GitHubPR
+  GitHubPR,
+  cosineSimilarity
 } from '../db';
 import {
   generateEmbedding,
@@ -246,7 +247,44 @@ router.post('/ideas/:id/merge', async (req: Request, res: Response, next: NextFu
   }
 });
 
-// 4. POST /webhooks/whatsapp
+// 3d. GET /api/ideas/:id/related-messages — find messages semantically related to an idea
+router.get('/ideas/:id/related-messages', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params;
+    const workspaceId = (req.query.workspaceId as string) || DEFAULT_WORKSPACE_ID;
+
+    const idea = await db.getIdeaById(id);
+    if (!idea) {
+      res.status(404).json({ error: 'Idea not found.' });
+      return;
+    }
+
+    const messages = await db.getMessages(workspaceId);
+    const MIN_SCORE = 0.25;
+
+    const scored = messages
+      .filter(m => m.embedding && m.embedding.length > 0 && idea.embedding && idea.embedding.length > 0)
+      .map(m => ({ ...m, score: cosineSimilarity(idea.embedding, m.embedding) }))
+      .filter(m => m.score >= MIN_SCORE)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 8)
+      .map(m => ({
+        id: m.id,
+        text: m.text,
+        sender: m.sender,
+        source: m.source,
+        channel: m.channel,
+        timestamp: m.timestamp,
+        score: m.score,
+      }));
+
+    res.json({ related: scored });
+  } catch (err) {
+    next(err);
+  }
+});
+
+
 router.post('/webhooks/whatsapp', async (req: Request, res: Response, next: NextFunction) => {
   try {
     // Twilio sends body as urlencoded form data, Slack/custom testing may send JSON

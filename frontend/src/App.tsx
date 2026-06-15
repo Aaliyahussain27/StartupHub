@@ -10,20 +10,16 @@ import {
   Plus,
   Activity,
   X,
-  Code,
   ChevronDown,
   ChevronRight,
   PanelLeftClose,
   PanelLeftOpen,
   MessageSquarePlus,
   MessageSquare,
-<<<<<<< HEAD
   GitMerge,
-  Link2
-=======
+  Link2,
   Sun,
   Moon
->>>>>>> d13a5154b06eb81e4c4cc2ef43c723f540e2d2cd
 } from 'lucide-react';
 import { useWebSocket } from './hooks/useWebSocket';
 import { api, type SearchResult, type SimilarIdea } from './services/api';
@@ -63,7 +59,7 @@ export function StartupHubLogo() {
 
 export default function App() {
   // Core Real-Time Ingestion Connection Hooks
-  const { isConnected, dashboardData } = useWebSocket(DEFAULT_WORKSPACE);
+  const { isConnected, dashboardData, momentumAlerts, blockerEscalation } = useWebSocket(DEFAULT_WORKSPACE);
 
   // Manual Theme Control Matrix Layer State
   const [theme, setTheme] = useState(() => {
@@ -187,6 +183,10 @@ export default function App() {
   const [duplicateCandidates, setDuplicateCandidates] = useState<SimilarIdea[]>([]);
   const [isDuplicateModalOpen, setIsDuplicateModalOpen] = useState(false);
 
+  // Related messages for active idea
+  const [relatedMessages, setRelatedMessages] = useState<any[]>([]);
+  const [loadingRelated, setLoadingRelated] = useState(false);
+
   const [sectionOpen, setSectionOpen] = useState({ ideas: true, projects: true, tools: true });
   const toggleSection = (key: 'ideas' | 'projects' | 'tools') => {
     setSectionOpen(prev => ({ ...prev, [key]: !prev[key] }));
@@ -284,6 +284,29 @@ export default function App() {
       .catch(() => setSimilarIdeas([]))
       .finally(() => setLoadingSimilar(false));
   }, [activeIdea?.id]);
+
+  // Load related messages whenever active idea changes
+  useEffect(() => {
+    if (!activeIdea?.id) { setRelatedMessages([]); return; }
+    setLoadingRelated(true);
+    api.getRelatedMessages(activeIdea.id, DEFAULT_WORKSPACE)
+      .then(setRelatedMessages)
+      .catch(() => setRelatedMessages([]))
+      .finally(() => setLoadingRelated(false));
+  }, [activeIdea?.id]);
+
+  // Fire toasts when momentum/blocker alerts arrive via WebSocket
+  useEffect(() => {
+    if (!momentumAlerts) return;
+    const names = momentumAlerts.stalledProjects.map(p => `"${p.title}" (${p.daysSinceActivity}d)`).join(', ');
+    pushToast('warning', 'Momentum Alert', `${momentumAlerts.stalledProjects.length} stalled project(s): ${names}`);
+  }, [momentumAlerts]);
+
+  useEffect(() => {
+    if (!blockerEscalation) return;
+    const names = blockerEscalation.escalatedBlockers.map(b => `"${b.title}" (${b.hoursBlocked}h)`).join(', ');
+    pushToast('error', 'Blocker Escalated', `${blockerEscalation.escalatedBlockers.length} task(s) blocked > 24h: ${names}`);
+  }, [blockerEscalation]);
 
   // Network Form Action Callbacks
   const handleCreateIdea = async (e: React.FormEvent) => {
@@ -746,15 +769,22 @@ export default function App() {
                       const projTasks = tasks.filter((t: any) => t.project_id === p.id);
                       const done = projTasks.filter((t: any) => t.status === 'done').length;
                       const pct = projTasks.length > 0 ? Math.round((done / projTasks.length) * 100) : 0;
+                      // Derive role: owner if you created it, else member
+                      const isOwner = currentUser && (p.owner === currentUser.email || p.created_by === currentUser.id);
+                      const roleLabel = isOwner ? 'owner' : 'member';
+                      const roleCls = isOwner
+                        ? 'bg-glow-indigo/10 text-glow-indigo border border-glow-indigo/20'
+                        : 'bg-slate-100 dark:bg-hub-border text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-hub-border';
                       return (
                         <div
                           key={p.id}
                           onClick={() => { setActiveProject(p); setActiveTool(null); setActiveIdea(null); }}
                           className={`px-7 py-1.5 rounded-lg cursor-pointer transition-colors ${activeProject?.id === p.id ? 'bg-slate-100 dark:bg-hub-bg' : 'hover:bg-slate-50 dark:hover:bg-hub-bg/60'}`}
                         >
-                          <div className="flex items-center justify-between">
+                          <div className="flex items-center justify-between gap-1">
                             <span className={`text-[12px] truncate flex-1 ${activeProject?.id === p.id ? 'text-slate-900 dark:text-slate-100' : 'text-slate-700 dark:text-slate-300'}`}>{p.title}</span>
-                            <span className="text-[10px] text-slate-500 ml-2">{pct}%</span>
+                            {currentUser && <span className={`text-[8px] px-1.5 py-0.5 rounded-full font-bold uppercase shrink-0 ${roleCls}`}>{roleLabel}</span>}
+                            <span className="text-[10px] text-slate-500 ml-1 shrink-0">{pct}%</span>
                           </div>
                           <div className="mt-1 h-0.5 bg-slate-200 dark:bg-hub-border rounded-full w-full">
                             <div className="h-0.5 bg-emerald-500 rounded-full transition-all" style={{ width: `${pct}%` }} />
@@ -910,33 +940,27 @@ export default function App() {
               </div>
 
               <div>
-<<<<<<< HEAD
-                <h3 className="text-[11px] font-bold text-blue-tide uppercase tracking-wider mb-2">Description</h3>
-                <p className="text-sm text-slate-300 leading-relaxed bg-hub-bg/50 rounded-lg border border-hub-border/40 p-3 whitespace-pre-wrap">
-=======
-                <h3 className="text-[11px] font-bold text-slate-400 dark:text-slate-400 uppercase tracking-wider mb-2">Description</h3>
-                <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed bg-slate-50 dark:bg-hub-bg/50 rounded-lg border border-slate-200 dark:border-hub-border/40 p-3">
->>>>>>> d13a5154b06eb81e4c4cc2ef43c723f540e2d2cd
+                <h3 className="text-[11px] font-bold text-slate-400 dark:text-blue-tide uppercase tracking-wider mb-2">Description</h3>
+                <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed bg-slate-50 dark:bg-hub-bg/50 rounded-lg border border-slate-200 dark:border-hub-border/40 p-3 whitespace-pre-wrap">
                   {activeIdea.description || 'No description provided.'}
                 </p>
               </div>
 
               <div>
-<<<<<<< HEAD
-                <h3 className="text-[11px] font-bold text-blue-tide uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                <h3 className="text-[11px] font-bold text-slate-400 dark:text-blue-tide uppercase tracking-wider mb-2 flex items-center gap-1.5">
                   <Link2 className="h-3.5 w-3.5" /> Similar Ideas
                 </h3>
-                <div className="flex flex-col gap-2 bg-hub-bg/50 rounded-lg border border-hub-border/40 p-3">
-                  {loadingSimilar && <p className="text-[11px] text-slate-600">Scanning for duplicates...</p>}
+                <div className="flex flex-col gap-2 bg-slate-50 dark:bg-hub-bg/50 rounded-lg border border-slate-200 dark:border-hub-border/40 p-3">
+                  {loadingSimilar && <p className="text-[11px] text-slate-500 dark:text-slate-600">Scanning for duplicates...</p>}
                   {!loadingSimilar && similarIdeas.length === 0 && (
-                    <p className="text-[11px] text-slate-600">No similar ideas found.</p>
+                    <p className="text-[11px] text-slate-400 dark:text-slate-600">No similar ideas found.</p>
                   )}
                   {similarIdeas.map((s) => (
-                    <div key={s.id} className="flex items-start justify-between gap-3 bg-hub-card/60 rounded-lg border border-hub-border/50 px-3 py-2">
+                    <div key={s.id} className="flex items-start justify-between gap-3 bg-white dark:bg-hub-card/60 rounded-lg border border-slate-100 dark:border-hub-border/50 px-3 py-2">
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2 mb-0.5">
-                          <span className="text-xs font-semibold text-slate-200 truncate">{s.title}</span>
-                          <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded shrink-0 ${s.score >= 0.45 ? 'bg-amber-900/40 text-amber-400' : 'bg-hub-border text-blue-tide'}`}>
+                          <span className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate">{s.title}</span>
+                          <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded shrink-0 ${s.score >= 0.45 ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400' : 'bg-slate-100 dark:bg-hub-border text-slate-600 dark:text-blue-tide'}`}>
                             {Math.round(s.score * 100)}% match
                           </span>
                         </div>
@@ -956,13 +980,42 @@ export default function App() {
                 </div>
               </div>
 
+              {/* RELATED MESSAGES — semantic links from Slack/WhatsApp */}
               <div>
-                <h3 className="text-[11px] font-bold text-blue-tide uppercase tracking-wider mb-2">Comments</h3>
-                <div className="flex flex-col gap-2 bg-hub-bg/50 rounded-lg border border-hub-border/40 p-3">
-=======
-                <h3 className="text-[11px] font-bold text-slate-400 dark:text-slate-400 uppercase tracking-wider mb-2">Comments</h3>
+                <h3 className="text-[11px] font-bold text-slate-400 dark:text-blue-tide uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                  <MessageSquarePlus className="h-3.5 w-3.5" /> Origin Messages
+                </h3>
                 <div className="flex flex-col gap-2 bg-slate-50 dark:bg-hub-bg/50 rounded-lg border border-slate-200 dark:border-hub-border/40 p-3">
->>>>>>> d13a5154b06eb81e4c4cc2ef43c723f540e2d2cd
+                  {loadingRelated && <p className="text-[11px] text-slate-400 dark:text-slate-600">Finding related messages...</p>}
+                  {!loadingRelated && relatedMessages.length === 0 && (
+                    <p className="text-[11px] text-slate-400 dark:text-slate-600">No related messages found. Send Slack/WhatsApp messages via the simulator to auto-link.</p>
+                  )}
+                  {relatedMessages.map((m, i) => (
+                    <div key={m.id || i} className="flex items-start gap-2.5 bg-white dark:bg-hub-card/60 rounded-lg border border-slate-100 dark:border-hub-border/50 px-3 py-2">
+                      <div className="shrink-0 mt-0.5">
+                        <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold uppercase border ${
+                          m.source === 'slack'
+                            ? 'bg-indigo-100 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border-indigo-200/60 dark:border-indigo-800/40'
+                            : m.source === 'whatsapp'
+                            ? 'bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200/60 dark:border-emerald-800/40'
+                            : 'bg-slate-100 dark:bg-slate-800/60 text-slate-600 dark:text-slate-300 border-slate-200/60 dark:border-slate-700/40'
+                        }`}>{m.source || 'msg'}</span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-0.5">
+                          <span className="text-[10px] font-bold text-slate-700 dark:text-slate-300 truncate">{m.sender || 'Unknown'}</span>
+                          <span className="text-[9px] font-mono px-1 py-0.5 rounded bg-slate-100 dark:bg-hub-border text-slate-500 dark:text-blue-tide shrink-0">{Math.round(m.score * 100)}% match</span>
+                        </div>
+                        <p className="text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed line-clamp-3">{m.text}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <h3 className="text-[11px] font-bold text-slate-400 dark:text-blue-tide uppercase tracking-wider mb-2">Comments</h3>
+                <div className="flex flex-col gap-2 bg-slate-50 dark:bg-hub-bg/50 rounded-lg border border-slate-200 dark:border-hub-border/40 p-3">
                   {(ideaComments[activeIdea.id]?.length || 0) === 0 && (
                     <p className="text-[11px] text-slate-400 dark:text-slate-600">No comments yet.</p>
                   )}
@@ -1042,10 +1095,6 @@ export default function App() {
       {/* FOOTER ROW */}
       <footer className="border-t border-slate-200 dark:border-hub-border bg-white dark:bg-hub-bg py-4 px-6 text-center text-xs text-slate-400 dark:text-slate-500 flex items-center justify-between transition-colors">
         <span>&copy; 2026 StartupHub Inc. Hackathon Release.</span>
-        <span className="flex items-center space-x-1 text-slate-300 dark:text-slate-600">
-          <Code className="h-3.5 w-3.5" />
-          <span>PostgreSQL + pgvector + Anthropic Claude SDK</span>
-        </span>
       </footer>
 
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />

@@ -4,10 +4,20 @@ import { io, Socket } from 'socket.io-client';
 // Use backend port 3001, or custom environment url
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
 
+export interface MomentumAlert {
+  stalledProjects: { id: string; title: string; daysSinceActivity: number }[];
+}
+
+export interface BlockerEscalation {
+  escalatedBlockers: { taskId: string; title: string; hoursBlocked: number }[];
+}
+
 export function useWebSocket(workspaceId: string = '00000000-0000-0000-0000-000000000000') {
   const [socket, setSocket] = useState<Socket | null>(null);
   const [dashboardData, setDashboardData] = useState<any>(null);
   const [isConnected, setIsConnected] = useState(false);
+  const [momentumAlerts, setMomentumAlerts] = useState<MomentumAlert | null>(null);
+  const [blockerEscalation, setBlockerEscalation] = useState<BlockerEscalation | null>(null);
 
   useEffect(() => {
     console.log(`[SOCKET] Connecting to backend at: ${BACKEND_URL}`);
@@ -34,10 +44,22 @@ export function useWebSocket(workspaceId: string = '00000000-0000-0000-0000-0000
       setDashboardData(data);
     });
 
+    // Momentum stall alerts (projects with no activity for 3+ days)
+    newSocket.on('momentum_alert', (data: MomentumAlert) => {
+      console.log('[SOCKET] Momentum alert received:', data);
+      setMomentumAlerts(data);
+    });
+
+    // Blocker escalation alerts (tasks blocked for 24+ hours)
+    newSocket.on('blocker_escalation', (data: BlockerEscalation) => {
+      console.log('[SOCKET] Blocker escalation received:', data);
+      setBlockerEscalation(data);
+    });
+
     return () => {
       newSocket.close();
     };
   }, [workspaceId]);
 
-  return { isConnected, dashboardData, socket };
+  return { isConnected, dashboardData, socket, momentumAlerts, blockerEscalation };
 }

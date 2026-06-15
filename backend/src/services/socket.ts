@@ -10,6 +10,84 @@ const log = (level: string, message: string) => {
   console.log(`[${ts}] [${level}] [SOCKET-SERVICE] - ${message}`);
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// MOMENTUM + BLOCKER ALERT CHECK
+// Runs on a 5-minute interval after server start.
+// Emits `momentum_alert` and `blocker_escalation` events to workspace rooms.
+// ─────────────────────────────────────────────────────────────────────────────
+const STALL_DAYS = 3;           // flag project if no task moved in 3 days
+const BLOCKER_ESCALATE_HRS = 24; // escalate blocker if stuck > 24 hours
+
+async function runAlertChecks() {
+  if (!io) return;
+
+  try {
+    // We check the default workspace; extend to multi-workspace by iterating db.getWorkspaces()
+    const workspaceId = DEFAULT_WORKSPACE_ID;
+
+    const tasks    = await db.getTasks(workspaceId);
+    const projects = await db.getProjects(workspaceId);
+
+    // ── 1. MOMENTUM ALERTS ───────────────────────────────────────────────────
+    const now = Date.now();
+    const stalledProjects: { id: string; title: string; daysSinceActivity: number }[] = [];
+
+    for (const project of projects) {
+      const projTasks = tasks.filter(t => t.project_id === project.id);
+      if (projTasks.length === 0) continue;
+
+      // Find the most recent task update time
+      const lastActivityMs = projTasks.reduce((max, t) => {
+        const ts = t.updated_at ? new Date(t.updated_at).getTime() : new Date(t.created_at).getTime();
+        return ts > max ? ts : max;
+      }, 0);
+
+      const daysSince = (now - lastActivityMs) / (1000 * 60 * 60 * 24);
+      if (daysSince >= STALL_DAYS) {
+        stalledProjects.push({
+          id: project.id,
+          title: project.title,
+          daysSinceActivity: Math.floor(daysSince),
+        });
+      }
+    }
+
+    if (stalledProjects.length > 0) {
+      log('WARN', `Momentum alert: ${stalledProjects.length} stalled project(s)`);
+      io.to(workspaceId).emit('momentum_alert', { stalledProjects });
+    }
+
+    // ── 2. BLOCKER ESCALATION ─────────────────────────────────────────────────
+    const blockerReport = await detectBlockers(tasks);
+    const escalatedBlockers: { taskId: string; title: string; hoursBlocked: number }[] = [];
+
+    for (const blocker of blockerReport.blockedTasks) {
+      // Use the blocked task's updated_at as the "blocked since" timestamp
+      const blockedTask = tasks.find(t => t.id === blocker.taskId);
+      if (!blockedTask) continue;
+      const blockedSince = blockedTask.updated_at
+        ? new Date(blockedTask.updated_at).getTime()
+        : new Date(blockedTask.created_at).getTime();
+      const hoursBlocked = (now - blockedSince) / (1000 * 60 * 60);
+
+      if (hoursBlocked >= BLOCKER_ESCALATE_HRS) {
+        escalatedBlockers.push({
+          taskId: blocker.taskId,
+          title: blockedTask.title,
+          hoursBlocked: Math.floor(hoursBlocked),
+        });
+      }
+    }
+
+    if (escalatedBlockers.length > 0) {
+      log('WARN', `Blocker escalation: ${escalatedBlockers.length} task(s) blocked > ${BLOCKER_ESCALATE_HRS}h`);
+      io.to(workspaceId).emit('blocker_escalation', { escalatedBlockers });
+    }
+  } catch (err: any) {
+    log('ERROR', `Alert check failed: ${err.message}`);
+  }
+}
+
 export function initializeSocket(server: HttpServer) {
   io = new SocketIOServer(server, {
     cors: {
@@ -36,6 +114,11 @@ export function initializeSocket(server: HttpServer) {
       log('INFO', `Client disconnected: ${socket.id}`);
     });
   });
+
+  // Start periodic alert checks (every 5 minutes)
+  const ALERT_INTERVAL_MS = 5 * 60 * 1000;
+  setInterval(runAlertChecks, ALERT_INTERVAL_MS);
+  log('INFO', `Alert checker scheduled every ${ALERT_INTERVAL_MS / 1000}s`);
 
   return io;
 }

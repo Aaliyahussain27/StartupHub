@@ -133,6 +133,17 @@ export const api = {
     return res.json();
   },
 
+  // 3d. Related messages for an idea (semantic similarity)
+  getRelatedMessages: async (ideaId: string, workspaceId: string = '00000000-0000-0000-0000-000000000000') => {
+    const res = await fetch(`${BACKEND_URL}/api/ideas/${ideaId}/related-messages?workspaceId=${workspaceId}`);
+    if (!res.ok) throw new Error('Failed to fetch related messages');
+    const data = await res.json();
+    return (data.related || []) as Array<{
+      id: string; text: string; sender: string; source: string;
+      channel: string; timestamp: string; score: number;
+    }>;
+  },
+
   // 4. Convert Idea to Project
   convertIdeaToProject: async (ideaId: string, owner: string, deadline: string, workspaceId: string = '00000000-0000-0000-0000-000000000000') => {
     const res = await fetch(`${BACKEND_URL}/api/projects/from-idea/${ideaId}`, {

@@ -132,7 +132,7 @@ export function CommunicationHub({
                   onClick={() => setSourceFilter(s)}
                   className={`text-[10px] px-2.5 py-1 rounded-full font-semibold capitalize border transition-all ${
                     sourceFilter === s
-                      ? 'bg-glow-indigo text-white border-glow-indigo shadow-sm shadow-glow-indigo/20'
+                      ? 'bg-glow-indigo border-glow-indigo shadow-sm shadow-glow-indigo/20'
                       : 'bg-slate-100 dark:bg-slate-800/50 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:border-glow-indigo/40'
                   }`}
                 >
