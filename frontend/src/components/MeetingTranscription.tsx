@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Mic, Square, FileText, CheckCircle, Brain, RefreshCw, Clock, Sparkles } from 'lucide-react';
 
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || `${window.location.protocol}//${window.location.hostname}:3001`;
 
 interface Meeting {
   id: string;

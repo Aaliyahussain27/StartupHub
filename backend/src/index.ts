@@ -28,7 +28,10 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 
 // Configure Middlewares
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+  origin: (origin, callback) => {
+    // Dynamically allow any origin during development to prevent CORS issues
+    callback(null, true);
+  },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   credentials: true
 }));

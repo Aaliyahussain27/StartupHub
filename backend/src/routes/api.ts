@@ -981,6 +981,35 @@ router.post('/action-items/:id/status', async (req: Request, res: Response, next
 
 // AUTHENTICATION & MANAGEMENT ENDPOINTS
 
+// Helper to validate and format StartupHub emails
+function processEmail(email: string): { formattedEmail: string | null; error: string | null } {
+  const trimmed = email.trim().toLowerCase();
+  if (!trimmed) {
+    return { formattedEmail: null, error: 'Email is required.' };
+  }
+  
+  if (!trimmed.includes('@')) {
+    // If it's just a username, append @startuphub.ai
+    return { formattedEmail: `${trimmed}@startuphub.ai`, error: null };
+  }
+  
+  // If it has a domain, it must be exactly @startuphub.ai
+  if (!trimmed.endsWith('@startuphub.ai')) {
+    return { formattedEmail: null, error: 'Registration/Login is restricted to @startuphub.ai domains.' };
+  }
+  
+  const username = trimmed.slice(0, -15); // Length of '@startuphub.ai' is 15
+  if (!username) {
+    return { formattedEmail: null, error: 'Username cannot be empty.' };
+  }
+  
+  if (username.includes('@')) {
+    return { formattedEmail: null, error: 'Invalid email address format.' };
+  }
+  
+  return { formattedEmail: trimmed, error: null };
+}
+
 // Auth: Register
 router.post('/auth/register', async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -989,7 +1018,14 @@ router.post('/auth/register', async (req: Request, res: Response, next: NextFunc
       res.status(400).json({ error: 'Email and password are required.' });
       return;
     }
-    const existingUser = await db.getUserByEmail(email);
+
+    const { formattedEmail, error: emailError } = processEmail(email);
+    if (emailError || !formattedEmail) {
+      res.status(400).json({ error: emailError });
+      return;
+    }
+
+    const existingUser = await db.getUserByEmail(formattedEmail);
     if (existingUser) {
       res.status(400).json({ error: 'User with this email already exists.' });
       return;
@@ -999,7 +1035,7 @@ router.post('/auth/register', async (req: Request, res: Response, next: NextFunc
     const user = await db.createUser({
       id: userId,
       workspace_id: workspaceId,
-      email,
+      email: formattedEmail,
       password
     });
     
@@ -1033,7 +1069,14 @@ router.post('/auth/login', async (req: Request, res: Response, next: NextFunctio
       res.status(400).json({ error: 'Email and password are required.' });
       return;
     }
-    const user = await db.getUserByEmail(email);
+
+    const { formattedEmail, error: emailError } = processEmail(email);
+    if (emailError || !formattedEmail) {
+      res.status(400).json({ error: emailError });
+      return;
+    }
+
+    const user = await db.getUserByEmail(formattedEmail);
     if (!user || user.password !== password) {
       res.status(401).json({ error: 'Invalid email or password.' });
       return;

@@ -91,7 +91,10 @@ async function runAlertChecks() {
 export function initializeSocket(server: HttpServer) {
   io = new SocketIOServer(server, {
     cors: {
-      origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+      origin: (origin, callback) => {
+        // Dynamically allow any origin during development to prevent CORS issues
+        callback(null, true);
+      },
       methods: ['GET', 'POST'],
       credentials: true
     }

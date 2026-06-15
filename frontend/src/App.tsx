@@ -21,7 +21,9 @@ import {
   Link2,
   Sun,
   Moon,
-  Mic
+  Mic,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import { useWebSocket } from './hooks/useWebSocket';
 import { api, type SearchResult, type SimilarIdea } from './services/api';
@@ -108,6 +110,7 @@ export default function App() {
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
   const [authEmail, setAuthEmail] = useState('');
   const [authPassword, setAuthPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -517,7 +520,7 @@ export default function App() {
             <div>
               <label className="block text-xs font-bold text-slate-400 mb-1.5 uppercase tracking-wider">Email Address</label>
               <input
-                type="email"
+                type="text"
                 placeholder="you@startuphub.ai"
                 value={authEmail}
                 onChange={(e) => setAuthEmail(e.target.value)}
@@ -529,14 +532,28 @@ export default function App() {
 
             <div>
               <label className="block text-xs font-bold text-slate-400 mb-1.5 uppercase tracking-wider">Password</label>
-              <input
-                type="password"
-                placeholder="••••••••"
-                value={authPassword}
-                onChange={(e) => setAuthPassword(e.target.value)}
-                className="w-full bg-slate-950 text-sm text-slate-200 px-3 py-2.5 rounded-lg border border-slate-800 focus:outline-none focus:border-glow-indigo/80 transition-colors"
-                required
-              />
+              <div className="relative">
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  placeholder="••••••••"
+                  value={authPassword}
+                  onChange={(e) => setAuthPassword(e.target.value)}
+                  className="w-full bg-slate-950 text-sm text-slate-200 pl-3 pr-10 py-2.5 rounded-lg border border-slate-800 focus:outline-none focus:border-glow-indigo/80 transition-colors"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(prev => !prev)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 transition-colors focus:outline-none"
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showPassword ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
+                </button>
+              </div>
             </div>
 
             <button
@@ -552,6 +569,7 @@ export default function App() {
               onClick={() => {
                 setAuthMode(prev => prev === 'login' ? 'register' : 'login');
                 setAuthError(null);
+                setShowPassword(false);
               }}
               className="text-xs text-blue-400 hover:text-blue-300 font-medium underline"
             >
