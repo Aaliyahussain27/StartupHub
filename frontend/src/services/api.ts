@@ -264,5 +264,13 @@ export const api = {
       throw new Error(err.error || 'Failed to update project settings');
     }
     return res.json();
+  },
+
+  getAssistantGuidance: async (ideaId: string, workspaceId: string = '00000000-0000-0000-0000-000000000000') => {
+    const res = await fetch(`${BACKEND_URL}/api/ideas/${ideaId}/assistant-guidance?workspaceId=${workspaceId}`, {
+      headers: getHeaders()
+    });
+    if (!res.ok) throw new Error('Failed to fetch assistant guidance');
+    return res.json();
   }
 };

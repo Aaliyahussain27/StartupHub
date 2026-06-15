@@ -110,7 +110,51 @@ router.get('/search', async (req: Request, res: Response, next: NextFunction) =>
   }
 });
 
-// 3. POST /api/ideas
+// GET /api/ideas
+router.get('/ideas', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const workspaceId = (req.query.workspaceId as string) || DEFAULT_WORKSPACE_ID;
+    const ideas = await db.getIdeas(workspaceId);
+    res.json(ideas);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/projects
+router.get('/projects', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const workspaceId = (req.query.workspaceId as string) || DEFAULT_WORKSPACE_ID;
+    const projects = await db.getProjects(workspaceId);
+    res.json(projects);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/decisions
+router.get('/decisions', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const workspaceId = (req.query.workspaceId as string) || DEFAULT_WORKSPACE_ID;
+    const decisions = await db.getDecisions(workspaceId);
+    res.json(decisions);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/action-items
+router.get('/action-items', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const workspaceId = (req.query.workspaceId as string) || DEFAULT_WORKSPACE_ID;
+    const actionItems = await db.getActionItems(workspaceId);
+    res.json(actionItems);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/ideas
 router.post('/ideas', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { title, description, source } = req.body;
@@ -1387,6 +1431,75 @@ router.get('/ideas/:id/related-meetings', async (req: Request, res: Response, ne
       score: sm.score,
       created_at: sm.meeting.created_at
     })));
+  } catch (err) {
+    next(err);
+  }
+});
+
+// 26. GET /ideas/:id/assistant-guidance
+router.get('/ideas/:id/assistant-guidance', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params;
+    const workspaceId = (req.query.workspaceId as string) || DEFAULT_WORKSPACE_ID;
+    const idea = await db.getIdeaById(id);
+    if (!idea) {
+      res.status(404).json({ error: 'Idea not found.' });
+      return;
+    }
+
+    // Get workspace snapshots to build context
+    const messages = await db.getMessages(workspaceId);
+    const similarIdeas = await db.findSimilarIdeas(workspaceId, idea.embedding, {
+      excludeId: id,
+      minScore: 0.2,
+      limit: 5
+    });
+
+    // Determine past reminders/conversations (look for matching mentions in similar messages/ideas)
+    const twoWeeksAgo = new Date();
+    twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
+    
+    // Find messages semantically related to this idea
+    const scoredMsgs = messages
+      .filter(m => m.embedding && m.embedding.length > 0 && idea.embedding && idea.embedding.length > 0)
+      .map(m => ({ ...m, score: cosineSimilarity(idea.embedding, m.embedding) }))
+      .filter(m => m.score >= 0.25)
+      .sort((a, b) => b.score - a.score);
+
+    const reminders = scoredMsgs.slice(0, 3).map(m => {
+      const msgDate = new Date(m.timestamp);
+      const daysAgo = Math.floor((Date.now() - msgDate.getTime()) / (1000 * 60 * 60 * 24));
+      return {
+        text: `"${m.text.slice(0, 80)}..." was discussed by ${m.sender} in ${m.channel} ${daysAgo} days ago.`,
+        sender: m.sender,
+        daysAgo
+      };
+    });
+
+    // Generate dynamic next steps
+    const nextSteps = [
+      { step: 1, label: 'Add details and refine parameters', completed: idea.description.length > 30 },
+      { step: 2, label: 'Scan workspace logs for duplicate overlap candidates', completed: similarIdeas.length > 0 },
+      { step: 3, label: 'Establish owners & deadlines to convert into an active roadmap project', completed: idea.status === 'project' }
+    ];
+
+    // Determine brainstorm tasks
+    const brainstormTasks = [
+      { title: `Design system architecture for "${idea.title}"`, category: 'Engineering' },
+      { title: `Draft workflow specifications and API endpoints`, category: 'Product' },
+      { title: `Verify schema boundaries and security rules`, category: 'Security' },
+      { title: `Deploy MVP staging environment and verify builds`, category: 'DevOps' }
+    ];
+
+    res.json({
+      ideaId: id,
+      suggestions: similarIdeas.length > 0 
+        ? `This idea is similar to "${similarIdeas[0].idea.title}" (${Math.round(similarIdeas[0].score * 100)}% match), might combine?` 
+        : `No direct duplicates. Consider merging with other ideas to combine specifications.`,
+      brainstormTasks,
+      reminders,
+      nextSteps
+    });
   } catch (err) {
     next(err);
   }

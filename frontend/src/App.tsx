@@ -32,6 +32,7 @@ import { DailyBriefing } from './components/DailyBriefing';
 import { ProjectWorkspace } from './components/ProjectWorkspace';
 import { CommunicationHub } from './components/CommunicationHub';
 import { MeetingTranscription } from './components/MeetingTranscription';
+import { AIAssistantPanel } from './components/AIAssistantPanel';
 import { useAppStore } from './store/useAppStore';
 
 const DEFAULT_WORKSPACE = '00000000-0000-0000-0000-000000000000';
@@ -993,7 +994,7 @@ export default function App() {
                   {!loadingSimilar && similarIdeas.length === 0 && (
                     <p className="text-[11px] text-slate-400 dark:text-slate-600">No similar ideas found.</p>
                   )}
-                  {similarIdeas.map((s) => (
+                  {similarIdeas.map((s: SimilarIdea) => (
                     <div key={s.id} className="flex items-start justify-between gap-3 bg-white dark:bg-hub-card/60 rounded-lg border border-slate-100 dark:border-hub-border/50 px-3 py-2">
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2 mb-0.5">
@@ -1105,18 +1106,24 @@ export default function App() {
                   </div>
                 </div>
               </div>
-
-              <div className="flex items-center justify-between bg-amber-500/5 dark:bg-driftwood/10 border border-amber-500/20 dark:border-driftwood/25 p-3 rounded-lg">
-                <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed">
-                  Ready to start building? Convert this idea into a project to generate tasks.
-                </p>
-                <button
-                  onClick={() => { setSelectedIdeaForProj(activeIdea); setIsProjectModalOpen(true); }}
-                  className="ml-3 shrink-0 px-3 py-2 bg-slate-800 dark:bg-soft-sand hover:bg-slate-900 dark:hover:bg-slate-200 text-white dark:text-slate-900 text-[11px] font-bold rounded-lg transition-colors whitespace-nowrap"
-                >
-                  Convert to Project
-                </button>
-              </div>
+              <AIAssistantPanel
+                idea={activeIdea}
+                onConvertToProject={() => { setSelectedIdeaForProj(activeIdea); setIsProjectModalOpen(true); }}
+                onAddTask={async (taskTitle) => {
+                  // Find or create project, then add task
+                  const matchingProj = projects.find((p: any) => p.idea_id === activeIdea.id);
+                  if (matchingProj) {
+                    try {
+                      await api.createTask(matchingProj.id, taskTitle, '', DEFAULT_WORKSPACE);
+                      pushToast('success', 'Task Created', `Added brainstormed task to "${matchingProj.title}"`);
+                    } catch (err: any) {
+                      pushToast('warning', 'Error', err.message || 'Could not add task');
+                    }
+                  } else {
+                    pushToast('warning', 'Convert Project First', 'This idea needs to be converted to a project first before adding tasks.');
+                  }
+                }}
+              />
             </div>
           )}
 

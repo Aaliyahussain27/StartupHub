@@ -23,12 +23,12 @@ export const useAppStore = create<AppState>((set) => ({
   activeTool: null,
   activeIdea: null,
 
-  setTheme: (theme) => {
+  setTheme: (theme: string) => {
     localStorage.setItem('sh-theme', theme);
     set({ theme });
   },
   
-  toggleTheme: () => set((state) => {
+  toggleTheme: () => set((state: AppState) => {
     const nextTheme = state.theme === 'dark' ? 'light' : 'dark';
     localStorage.setItem('sh-theme', nextTheme);
     const root = window.document.documentElement;
@@ -40,21 +40,21 @@ export const useAppStore = create<AppState>((set) => ({
     return { theme: nextTheme };
   }),
 
-  setCurrentUser: (user) => set({ currentUser: user }),
+  setCurrentUser: (user: any | null) => set({ currentUser: user }),
   
-  setActiveProject: (project) => set({
+  setActiveProject: (project: any | null) => set({
     activeProject: project,
     activeTool: null,
     activeIdea: null
   }),
   
-  setActiveTool: (tool) => set({
+  setActiveTool: (tool: 'briefing' | 'onboarding' | 'simulator' | 'comms' | 'meetings' | null) => set({
     activeTool: tool,
     activeProject: null,
     activeIdea: null
   }),
   
-  setActiveIdea: (idea) => set({
+  setActiveIdea: (idea: any | null) => set({
     activeIdea: idea,
     activeTool: null,
     activeProject: null
