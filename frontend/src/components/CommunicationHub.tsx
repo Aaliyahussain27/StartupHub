@@ -63,7 +63,6 @@ export function CommunicationHub({
       await api.updateActionItemStatus(item.id, newStatus);
       onStatusChange?.();
     } catch {
-      // silently ignore; WebSocket will correct state
     } finally {
       setUpdatingItem(null);
     }

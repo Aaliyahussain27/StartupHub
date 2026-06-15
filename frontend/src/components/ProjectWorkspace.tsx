@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { 
   Folder, Plus, Sparkles, AlertTriangle, Check, ListChecks, Lock, 
-  Clock, CheckCircle, Circle, Ban, X, ChevronDown, ChevronRight, MessageSquare 
+  Clock, CheckCircle, Circle, Ban, X, ChevronDown, ChevronRight, MessageSquare,
+  Settings, Trash2
 } from 'lucide-react';
 import { api } from '../services/api';
 
@@ -65,6 +66,7 @@ interface ProjectWorkspaceProps {
   currentUser?: any;
   onAddDeadlineClick?: () => void;
   onAddTaskClick?: () => void;
+  onDeleteProjectClick?: (projectId: string) => void;
 }
 
 export function ProjectWorkspace({ 
@@ -74,7 +76,8 @@ export function ProjectWorkspace({
   projects = [],
   currentUser,
   onAddDeadlineClick,
-  onAddTaskClick 
+  onAddTaskClick,
+  onDeleteProjectClick
 }: ProjectWorkspaceProps) {
   const [modal, setModal] = useState<string | null>(null);
   const [localDeadline, setLocalDeadline] = useState<string>('');
@@ -102,6 +105,17 @@ export function ProjectWorkspace({
   };
 
   const projectInstance = projects[0] || { id: 'p1', title: 'StartupHub Core', status: 'active', activeSince: '2026-06-10', deadline: '', owner: 'Ovee' };
+
+  const isOwner = !!(
+    currentUser &&
+    projectInstance.owner &&
+    (
+      projectInstance.owner.toLowerCase() === currentUser.email?.toLowerCase() ||
+      currentUser.email?.toLowerCase().startsWith(projectInstance.owner.toLowerCase()) ||
+      (projectInstance.owner.includes('@') && projectInstance.owner.toLowerCase() === currentUser.email?.toLowerCase()) ||
+      (!projectInstance.owner.includes('@') && currentUser.email?.toLowerCase().startsWith(projectInstance.owner.toLowerCase() + '@'))
+    )
+  );
   
   // Sync deadline from project data on first load
   useState(() => { if (projectInstance.deadline && !localDeadline) setLocalDeadline(projectInstance.deadline); });
@@ -197,6 +211,22 @@ export function ProjectWorkspace({
           <span className="text-slate-400 dark:text-slate-500 font-normal text-xs">/ Project Workspace</span>
         </div>
         <div className="flex gap-2">
+          {isOwner && (
+            <>
+              <button
+                onClick={onAddDeadlineClick}
+                className="flex items-center gap-1.5 text-xs px-3 py-1.5 border border-slate-200 dark:border-slate-800 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 transition-all font-semibold"
+              >
+                <Settings className="h-3.5 w-3.5 text-glow-indigo" /> Edit Project
+              </button>
+              <button
+                onClick={() => onDeleteProjectClick && onDeleteProjectClick(projectInstance.id)}
+                className="flex items-center gap-1.5 text-xs px-3 py-1.5 border border-rose-200 dark:border-rose-950/40 rounded-lg text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/20 transition-all font-semibold"
+              >
+                <Trash2 className="h-3.5 w-3.5 text-rose-500" /> Delete Project
+              </button>
+            </>
+          )}
           <button onClick={onAddTaskClick} className="flex items-center gap-1.5 text-xs px-3 py-1.5 border border-slate-200 dark:border-slate-800 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 transition-all font-semibold">
             <Plus className="h-3.5 w-3.5 text-glow-indigo" /> Add Task
           </button>

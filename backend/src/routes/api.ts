@@ -62,6 +62,34 @@ async function canModifyProject(userId: string, projectId: string): Promise<bool
   return member.role === 'owner' || member.role === 'editor';
 }
 
+async function isProjectOwner(userId: string, projectId: string): Promise<boolean> {
+  const members = await db.getProjectMembers(projectId);
+  const member = members.find(m => m.user_id === userId);
+  if (member && member.role === 'owner') return true;
+
+  try {
+    const projects = await db.getProjects();
+    const project = projects.find(p => p.id === projectId);
+    if (project) {
+      const users = await db.getUsers(project.workspace_id);
+      const user = users.find(u => u.id === userId);
+      if (user && user.email) {
+        if (
+          project.owner.toLowerCase() === user.email.toLowerCase() ||
+          user.email.toLowerCase().startsWith(project.owner.toLowerCase() + '@') ||
+          user.email.toLowerCase().startsWith(project.owner.toLowerCase())
+        ) {
+          return true;
+        }
+      }
+    }
+  } catch (err) {
+    console.error('Error in isProjectOwner email fallback:', err);
+  }
+
+  return false;
+}
+
 router.use(authenticateUser);
 
 // 1. GET /api/dashboard
@@ -81,6 +109,9 @@ router.get('/dashboard', async (req: Request, res: Response, next: NextFunction)
         const taskObj = state.tasks.find(t => t.id === b.taskId);
         return taskObj ? userProjectIds.has(taskObj.project_id) : false;
       });
+      if (state.projectMembers) {
+        state.projectMembers = state.projectMembers.filter(m => userProjectIds.has(m.project_id));
+      }
     }
     
     res.json(state);
@@ -1186,10 +1217,10 @@ router.post('/projects/:id/settings', requireAuth, async (req: Request, res: Res
     const workspaceId = req.body.workspaceId || DEFAULT_WORKSPACE_ID;
     const user = (req as any).user;
 
-    // Role Guard: Only owners/editors can change project settings
-    const isAllowed = await canModifyProject(user.id, id);
-    if (!isAllowed) {
-      res.status(403).json({ error: 'Access Denied: Only project owners or editors can change target deadlines or assignees.' });
+    // Role Guard: Only project owners can change project settings
+    const isOwner = await isProjectOwner(user.id, id);
+    if (!isOwner) {
+      res.status(403).json({ error: 'Access Denied: Only the project owner can edit project settings.' });
       return;
     }
 
@@ -1206,6 +1237,32 @@ router.post('/projects/:id/settings', requireAuth, async (req: Request, res: Res
           });
         }
       }
+      await broadcastDashboardUpdate(workspaceId);
+      res.json({ success: true });
+    } else {
+      res.status(404).json({ error: 'Project not found.' });
+    }
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Projects: Delete project
+router.delete('/projects/:id', requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params;
+    const workspaceId = (req.query.workspaceId as string) || DEFAULT_WORKSPACE_ID;
+    const user = (req as any).user;
+
+    // Role Guard: Only owners can delete projects
+    const isOwner = await isProjectOwner(user.id, id);
+    if (!isOwner) {
+      res.status(403).json({ error: 'Access Denied: Only the project owner can delete this project.' });
+      return;
+    }
+
+    const deleted = await db.deleteProject(id);
+    if (deleted) {
       await broadcastDashboardUpdate(workspaceId);
       res.json({ success: true });
     } else {
