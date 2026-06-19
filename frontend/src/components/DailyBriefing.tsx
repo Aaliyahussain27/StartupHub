@@ -8,6 +8,8 @@ interface BriefingData {
   summary: string;
   highlights: Array<{ icon: 'decision' | 'blocker' | 'action' | 'idea'; text: string }>;
   generatedAt: string;
+  aiActive?: boolean;
+  aiProvider?: 'claude' | 'gemini' | 'fallback';
 }
 
 const ICON_MAP = {
@@ -65,10 +67,38 @@ export function DailyBriefing({ workspaceId }: DailyBriefingProps) {
     <div className="bg-white/85 dark:bg-hub-card/45 backdrop-blur-md border border-slate-200/60 dark:border-hub-border/60 rounded-2xl p-5 flex flex-col gap-3.5 shadow-sm shadow-slate-200/20 dark:shadow-none">
       {/* Header */}
       <div className="flex items-center justify-between pb-2.5 border-b border-slate-200 dark:border-hub-border/40">
-        <h2 className="text-sm font-extrabold text-slate-800 dark:text-slate-200 uppercase tracking-wider flex items-center gap-2">
-          <Sunrise className="h-4.5 w-4.5 text-glow-indigo animate-pulse" />
-          <span>AI Daily Briefing</span>
-        </h2>
+        <div className="flex items-center gap-2.5">
+          <h2 className="text-sm font-extrabold text-slate-800 dark:text-slate-200 uppercase tracking-wider flex items-center gap-2">
+            <Sunrise className="h-4.5 w-4.5 text-glow-indigo animate-pulse" />
+            <span>AI Daily Briefing</span>
+          </h2>
+          {briefing && (
+            <div className={`flex items-center gap-1 px-2 py-0.5 rounded-full border text-[9px] font-bold uppercase tracking-wider transition-all select-none ${
+              briefing.aiProvider === 'gemini'
+                ? 'bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/20'
+                : briefing.aiProvider === 'claude'
+                ? 'bg-violet-500/10 text-violet-600 dark:text-violet-400 border-violet-500/20' 
+                : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20'
+            }`}>
+              {briefing.aiProvider === 'gemini' ? (
+                <>
+                  <Zap className="h-2.5 w-2.5 text-sky-500" />
+                  <span>Gemini</span>
+                </>
+              ) : briefing.aiProvider === 'claude' ? (
+                <>
+                  <Zap className="h-2.5 w-2.5 text-violet-500" />
+                  <span>Claude</span>
+                </>
+              ) : (
+                <>
+                  <AlertTriangle className="h-2.5 w-2.5 text-amber-500" />
+                  <span>Fallback</span>
+                </>
+              )}
+            </div>
+          )}
+        </div>
         <button
           onClick={generate}
           disabled={loading}
@@ -84,7 +114,7 @@ export function DailyBriefing({ workspaceId }: DailyBriefingProps) {
         <div className="flex flex-col items-center justify-center py-8 text-center gap-2.5">
           <Sunrise className="h-10 w-10 text-glow-indigo/35 opacity-40 animate-pulse" />
           <p className="text-xs font-bold text-slate-600 dark:text-slate-400">{greeting}! Hit Generate for your AI briefing.</p>
-          <p className="text-[10px] text-slate-400 dark:text-slate-500 max-w-[240px]">Claude will analyze workspace activity to construct priorities, decisions & blockers.</p>
+          <p className="text-[10px] text-slate-400 dark:text-slate-500 max-w-[240px]">AI will analyze workspace activity to construct priorities, decisions & blockers.</p>
         </div>
       )}
 

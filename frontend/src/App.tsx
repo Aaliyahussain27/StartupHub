@@ -32,7 +32,8 @@ import {
   Check,
   GitPullRequest,
   ClipboardList,
-  LayoutTemplate
+  LayoutTemplate,
+  Sparkles
 } from 'lucide-react';
 import { useWebSocket } from './hooks/useWebSocket';
 import { api, type SearchResult, type SimilarIdea } from './services/api';
@@ -1008,9 +1009,35 @@ export default function App() {
             <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">Inject synthetic events into the real-time processing pipeline</p>
           </div>
         </div>
-        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-100 dark:bg-hub-bg border border-slate-200 dark:border-hub-border">
-          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-          <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Pipeline Active</span>
+        <div className="flex gap-2">
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-100 dark:bg-hub-bg border border-slate-200 dark:border-hub-border">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Pipeline Active</span>
+          </div>
+          <div className={`flex items-center gap-1 px-2.5 py-1 rounded-full border text-[9px] font-bold uppercase tracking-wider transition-all select-none ${
+            dashboardData?.aiProvider === 'gemini'
+              ? 'bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/20'
+              : dashboardData?.aiProvider === 'claude' 
+              ? 'bg-violet-500/10 text-violet-600 dark:text-violet-400 border-violet-500/20' 
+              : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20'
+          }`}>
+            {dashboardData?.aiProvider === 'gemini' ? (
+              <>
+                <Sparkles className="h-2.5 w-2.5 text-sky-500 dark:text-sky-400 animate-pulse" />
+                <span>Gemini AI</span>
+              </>
+            ) : dashboardData?.aiProvider === 'claude' ? (
+              <>
+                <Sparkles className="h-2.5 w-2.5 text-violet-500 dark:text-violet-400 animate-pulse" />
+                <span>Claude AI</span>
+              </>
+            ) : (
+              <>
+                <AlertTriangle className="h-2.5 w-2.5 text-amber-500" />
+                <span>Fallback Mode</span>
+              </>
+            )}
+          </div>
         </div>
       </div>
 
@@ -1370,6 +1397,7 @@ export default function App() {
       projects={activeProject ? [activeProject] : (projects.length > 0 ? [projects[0]] : [])}
       users={workspaceUsers}
       currentUser={currentUser}
+      aiProvider={dashboardData?.aiProvider}
       onAddDeadlineClick={() => {
         const target = activeProject || (projects.length > 0 ? projects[0] : null);
         if (target) {

@@ -184,7 +184,7 @@ export function CommunicationHub({
               <span className="text-[10px] text-slate-400">{decisions.length} total</span>
             </div>
             {decisions.length === 0 ? (
-              <EmptyState icon={<Check className="h-8 w-8" />} title="No decisions logged" body="Send messages via the Simulator — Claude will extract decisions automatically." />
+              <EmptyState icon={<Check className="h-8 w-8" />} title="No decisions logged" body="Send messages via the Simulator — AI will extract decisions automatically." />
             ) : (
               decisions.map((d, i) => {
                 const isOpen = expandedDecision === (d.id || String(i));

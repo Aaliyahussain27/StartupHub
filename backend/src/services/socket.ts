@@ -1,7 +1,7 @@
 import { Server as HttpServer } from 'http';
 import { Server as SocketIOServer, Socket } from 'socket.io';
 import { db, DEFAULT_WORKSPACE_ID } from '../db';
-import { detectBlockers } from './claude';
+import { detectBlockers, isClaudeActive } from './claude';
 
 let io: SocketIOServer | null = null;
 
@@ -151,7 +151,8 @@ export async function getDashboardState(workspaceId: string = DEFAULT_WORKSPACE_
       githubPrs,
       blockers: blockerReport.blockedTasks,
       circularDependencies: blockerReport.circularDependencies,
-      projectMembers
+      projectMembers,
+      aiActive: isClaudeActive()
     };
   } catch (err: any) {
     log('ERROR', `Failed to get dashboard state: ${err.message}`);
@@ -165,7 +166,8 @@ export async function getDashboardState(workspaceId: string = DEFAULT_WORKSPACE_
       githubPrs: [],
       blockers: [],
       circularDependencies: [],
-      projectMembers: []
+      projectMembers: [],
+      aiActive: false
     };
   }
 }

@@ -68,6 +68,7 @@ interface ProjectWorkspaceProps {
   onAddTaskClick?: () => void;
   onDeleteProjectClick?: (projectId: string) => void;
   onNudgeUser?: (userEmail: string, taskTitle: string) => void;
+  aiProvider?: 'claude' | 'gemini' | 'fallback';
 }
 
 export function ProjectWorkspace({ 
@@ -80,7 +81,8 @@ export function ProjectWorkspace({
   onAddDeadlineClick,
   onAddTaskClick,
   onDeleteProjectClick,
-  onNudgeUser
+  onNudgeUser,
+  aiProvider = 'fallback'
 }: ProjectWorkspaceProps) {
   const [modal, setModal] = useState<string | null>(null);
   const [localDeadline, setLocalDeadline] = useState<string>('');
@@ -240,6 +242,31 @@ export function ProjectWorkspace({
           <Folder className="h-4 w-4 text-glow-indigo" />
           {projectInstance.title}
           <span className="text-slate-400 dark:text-slate-500 font-normal text-xs">/ Project Workspace</span>
+          
+          <div className={`flex items-center gap-1 px-2 py-0.5 rounded-full border text-[9px] font-bold uppercase tracking-wider transition-all select-none ml-1.5 ${
+            aiProvider === 'gemini'
+              ? 'bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/20 shadow-sm shadow-sky-500/5'
+              : aiProvider === 'claude'
+              ? 'bg-violet-500/10 text-violet-600 dark:text-violet-400 border-violet-500/20 shadow-sm shadow-violet-500/5' 
+              : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20 shadow-sm shadow-amber-500/5'
+          }`}>
+            {aiProvider === 'gemini' ? (
+              <>
+                <Sparkles className="h-2.5 w-2.5 text-sky-500 dark:text-sky-400 animate-pulse" />
+                <span>Gemini Active</span>
+              </>
+            ) : aiProvider === 'claude' ? (
+              <>
+                <Sparkles className="h-2.5 w-2.5 text-violet-500 dark:text-violet-400 animate-pulse" />
+                <span>Claude Active</span>
+              </>
+            ) : (
+              <>
+                <AlertTriangle className="h-2.5 w-2.5 text-amber-500" />
+                <span>Fallback Mode</span>
+              </>
+            )}
+          </div>
         </div>
         <div className="flex gap-2">
           {isOwner && (

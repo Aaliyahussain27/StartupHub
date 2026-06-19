@@ -1,27 +1,82 @@
 import Anthropic from '@anthropic-ai/sdk';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 let anthropic: Anthropic | null = null;
+let gemini: GoogleGenerativeAI | null = null;
+let aiProvider: 'claude' | 'gemini' | 'fallback' = 'fallback';
+let aiStatus: 'active' | 'fallback' | 'checking' = 'fallback';
 
 const log = (level: string, message: string) => {
   const ts = new Date().toISOString().replace('T', ' ').substring(0, 19);
-  console.log(`[${ts}] [${level}] [CLAUDE-SERVICE] - ${message}`);
+  console.log(`[${ts}] [${level}] [AI-SERVICE] - ${message}`);
 };
 
-// Initialize Claude Client
+// Initialize AI Client
 export function initializeClaude() {
-  const apiKey = process.env.CLAUDE_API_KEY;
-  if (!apiKey || apiKey.trim() === '' || apiKey.startsWith('sk-...')) {
-    log('WARN', 'CLAUDE_API_KEY is missing or template default. Running in Regex & Semantic Fallback Mode.');
-    anthropic = null;
+  const claudeKey = process.env.CLAUDE_API_KEY;
+  const geminiKey = process.env.GEMINI_API_KEY;
+
+  log('INFO', 'Initializing AI client...');
+
+  // 1. Try Gemini first if key is present
+  if (geminiKey && geminiKey.trim() !== '' && !geminiKey.startsWith('GEMINI_API_KEY')) {
+    log('INFO', 'Initializing Google Gemini Client.');
+    gemini = new GoogleGenerativeAI(geminiKey);
+    aiStatus = 'checking';
+    
+    const model = gemini.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    model.generateContent('h')
+      .then(() => {
+        log('INFO', 'Gemini API connection validated successfully. Running in Gemini Mode.');
+        aiProvider = 'gemini';
+        aiStatus = 'active';
+      })
+      .catch((err: any) => {
+        log('WARN', `Gemini API connection validation failed: ${err.message}. Trying Claude client next.`);
+        gemini = null;
+        tryClaudeFallback(claudeKey);
+      });
   } else {
-    log('INFO', 'Initializing Anthropic Claude Client.');
-    anthropic = new Anthropic({ apiKey });
+    tryClaudeFallback(claudeKey);
   }
 }
 
-// Check if Claude is active
+function tryClaudeFallback(claudeKey: string | undefined) {
+  if (claudeKey && claudeKey.trim() !== '' && !claudeKey.startsWith('sk-...')) {
+    log('INFO', 'Initializing Anthropic Claude Client.');
+    anthropic = new Anthropic({ apiKey: claudeKey });
+    aiStatus = 'checking';
+
+    // Validate the client connection and credit balance asynchronously
+    anthropic.messages.create({
+      model: 'claude-3-5-sonnet-20241022',
+      max_tokens: 1,
+      messages: [{ role: 'user', content: 'h' }]
+    }).then(() => {
+      log('INFO', 'Claude API connection validated successfully. Running in Claude Mode.');
+      aiProvider = 'claude';
+      aiStatus = 'active';
+    }).catch((err: any) => {
+      log('WARN', `Claude API connection validation failed: ${err.message}. Running in Fallback Mode.`);
+      aiStatus = 'fallback';
+      aiProvider = 'fallback';
+      anthropic = null; // Set client to null so all pipeline tasks immediately use the smart regex fallback
+    });
+  } else {
+    log('WARN', 'No active LLM provider API keys available. Running in Regex & Semantic Fallback Mode.');
+    aiStatus = 'fallback';
+    aiProvider = 'fallback';
+  }
+}
+
+// Check if AI is active
 export function isClaudeActive(): boolean {
-  return anthropic !== null;
+  return aiStatus === 'active';
+}
+
+// Check which provider is running
+export function getAIProvider(): 'claude' | 'gemini' | 'fallback' {
+  return aiProvider;
 }
 
 // 1. EMBEDDING GENERATION (1536-dimensional vector)
@@ -31,8 +86,7 @@ export async function generateEmbedding(text: string): Promise<number[]> {
     return new Array(1536).fill(0);
   }
 
-  // If Claude API key is active, we can try to call it or fallback to hash embedding
-  // since Anthropic does not have a general public embeddings endpoint yet,
+  // Anthropic does not have a general public embeddings endpoint yet,
   // we default to the deterministic semantic hashing.
   return generateDeterministicEmbedding(text);
 }
@@ -99,41 +153,40 @@ function splitIntoSentences(text: string): string[] {
 export async function summarizeMessages(messages: string[]): Promise<string> {
   const combinedText = messages.join('\n');
   
-  if (!anthropic) {
-    // Fallback: Word count + first & last sentences
-    const words = combinedText.split(/\s+/).filter(w => w.length > 0);
-    const wordCount = words.length;
-    const sentences = splitIntoSentences(combinedText);
-    
-    if (sentences.length === 0) {
-      return `Daily Digest: Empty message log. (0 words)`;
+  if (gemini) {
+    try {
+      const model = gemini.getGenerativeModel({ model: 'gemini-1.5-flash' });
+      const response = await model.generateContent(
+        `Summarize these messages. Focus on: decisions made, blockers, progress. Keep it concise. Messages:\n${combinedText}`
+      );
+      const text = response.response.text();
+      if (text) return text.trim();
+    } catch (err: any) {
+      log('ERROR', `Gemini summarization failed: ${err.message}. Trying Claude.`);
     }
-    
-    const firstSentence = sentences[0];
-    const lastSentence = sentences[sentences.length - 1];
-    
-    return `Daily Digest (Word Count: ${wordCount}): ${firstSentence}${sentences.length > 1 ? ' ' + lastSentence : ''} (System fallback summary)`;
   }
 
-  try {
-    const response = await anthropic.messages.create({
-      model: 'claude-3-5-sonnet-20241022',
-      max_tokens: 250,
-      messages: [
-        {
-          role: 'user',
-          content: `Summarize these messages. Focus on: decisions made, blockers, progress. Keep it concise. Messages:\n${combinedText}`
-        }
-      ]
-    });
-    
-    const textContent = response.content[0].type === 'text' ? response.content[0].text : '';
-    return textContent || 'Failed to generate summary.';
-  } catch (err: any) {
-    log('ERROR', `Claude call failed: ${err.message}. Triggering fallback.`);
-    // Fallback to simple summarizer
-    return summarizeMessagesFallback(combinedText);
+  if (anthropic) {
+    try {
+      const response = await anthropic.messages.create({
+        model: 'claude-3-5-sonnet-20241022',
+        max_tokens: 250,
+        messages: [
+          {
+            role: 'user',
+            content: `Summarize these messages. Focus on: decisions made, blockers, progress. Keep it concise. Messages:\n${combinedText}`
+          }
+        ]
+      });
+      
+      const textContent = response.content[0].type === 'text' ? response.content[0].text : '';
+      if (textContent) return textContent.trim();
+    } catch (err: any) {
+      log('ERROR', `Claude call failed: ${err.message}. Triggering fallback.`);
+    }
   }
+
+  return summarizeMessagesFallback(combinedText);
 }
 
 function summarizeMessagesFallback(text: string): string {
@@ -144,45 +197,48 @@ function summarizeMessagesFallback(text: string): string {
 
 // 3. DECISION EXTRACTION
 export async function extractDecision(text: string): Promise<string | null> {
-  if (!anthropic) {
-    // Fallback: regex for decide|agreed|use|chosen
-    const rx = /decide|agreed|use|chosen/i;
-    const sentences = splitIntoSentences(text);
-    
-    for (const sentence of sentences) {
-      if (rx.test(sentence)) {
-        return `Decision: ${sentence} (System Extracted, fallback-approved)`;
-      }
+  if (gemini) {
+    try {
+      const model = gemini.getGenerativeModel({ model: 'gemini-1.5-flash' });
+      const response = await model.generateContent(
+        `Extract the decision made in this conversation. Format: 'Decision: [what] ([who proposed], [outcome])'. If no decision is made, return nothing. Text:\n${text}`
+      );
+      const content = response.response.text();
+      if (content && content.trim() !== '') return content.trim();
+    } catch (err: any) {
+      log('ERROR', `Gemini decision extraction failed: ${err.message}. Trying Claude.`);
     }
-    return null;
   }
 
-  try {
-    const response = await anthropic.messages.create({
-      model: 'claude-3-5-sonnet-20241022',
-      max_tokens: 150,
-      messages: [
-        {
-          role: 'user',
-          content: `Extract the decision made in this conversation. Format: 'Decision: [what] ([who proposed], [outcome])'. If no decision is made, return nothing. Text:\n${text}`
-        }
-      ]
-    });
-    
-    const content = response.content[0].type === 'text' ? response.content[0].text : '';
-    return content.trim() !== '' ? content.trim() : null;
-  } catch (err: any) {
-    log('ERROR', `Claude call failed: ${err.message}`);
-    // Run local fallback regex
-    const rx = /decide|agreed|use|chosen/i;
-    const sentences = splitIntoSentences(text);
-    for (const sentence of sentences) {
-      if (rx.test(sentence)) {
-        return `Decision: ${sentence} (System Extracted, fallback-approved)`;
-      }
+  if (anthropic) {
+    try {
+      const response = await anthropic.messages.create({
+        model: 'claude-3-5-sonnet-20241022',
+        max_tokens: 150,
+        messages: [
+          {
+            role: 'user',
+            content: `Extract the decision made in this conversation. Format: 'Decision: [what] ([who proposed], [outcome])'. If no decision is made, return nothing. Text:\n${text}`
+          }
+        ]
+      });
+      
+      const content = response.content[0].type === 'text' ? response.content[0].text : '';
+      if (content && content.trim() !== '') return content.trim();
+    } catch (err: any) {
+      log('ERROR', `Claude call failed: ${err.message}`);
     }
-    return null;
   }
+
+  // Run local fallback regex
+  const rx = /decide|agreed|use|chosen/i;
+  const sentences = splitIntoSentences(text);
+  for (const sentence of sentences) {
+    if (rx.test(sentence)) {
+      return `Decision: ${sentence} (System Extracted, fallback-approved)`;
+    }
+  }
+  return null;
 }
 
 // 4. ACTION ITEM EXTRACTION
@@ -193,102 +249,97 @@ export interface ExtractedActionItem {
 }
 
 export async function extractActionItems(text: string): Promise<ExtractedActionItem[]> {
-  if (!anthropic) {
-    // Fallback: regex for will|should|by [date]
-    const actionItems: ExtractedActionItem[] = [];
-    const sentences = splitIntoSentences(text);
-    
-    for (const sentence of sentences) {
-      // Look for will, should, or "by <word>"
-      const hasWill = /\bwill\b/i.test(sentence);
-      const hasShould = /\bshould\b/i.test(sentence);
-      const hasBy = /\bby\s+(\w+)\b/i.test(sentence);
-      
-      if (hasWill || hasShould || hasBy) {
-        // Extract owner (find first capitalized word that is not at the start, or default)
-        const words = sentence.split(/\s+/);
-        let owner = 'Team';
-        
-        // Find owner: look for a capitalized word that is probably a name
-        for (let i = 0; i < words.length; i++) {
-          const w = words[i].replace(/[^\w]/g, '');
-          if (w.length > 1 && w[0] === w[0].toUpperCase() && i > 0 && w !== 'I' && w !== 'We' && w !== 'The' && w !== 'Then') {
-            owner = w;
-            break;
-          }
-        }
-        
-        // If not found, use first word if capitalized
-        if (owner === 'Team' && words.length > 0) {
-          const w = words[0].replace(/[^\w]/g, '');
-          if (w.length > 1 && w[0] === w[0].toUpperCase() && w !== 'I' && w !== 'We' && w !== 'The' && w !== 'Then') {
-            owner = w;
-          }
-        }
-
-        // Task extraction: text after will/should or the entire sentence
-        let task = sentence;
-        const matchIndex = sentence.toLowerCase().indexOf('will');
-        const shouldIndex = sentence.toLowerCase().indexOf('should');
-        
-        if (matchIndex > -1) {
-          task = sentence.substring(matchIndex + 4).trim();
-        } else if (shouldIndex > -1) {
-          task = sentence.substring(shouldIndex + 6).trim();
-        }
-        
-        // Deadline extraction
-        let deadline = 'Friday';
-        const byMatch = sentence.match(/\bby\s+(\w+(\s+\w+)?)\b/i);
-        if (byMatch) {
-          deadline = byMatch[1].replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, '');
-        }
-
-        // Clean up task string
-        task = task.charAt(0).toUpperCase() + task.slice(1);
-        
-        actionItems.push({ owner, task, deadline });
-      }
+  if (gemini) {
+    try {
+      const model = gemini.getGenerativeModel({
+        model: 'gemini-1.5-flash',
+        generationConfig: { responseMimeType: 'application/json' }
+      });
+      const response = await model.generateContent(
+        `Extract action items from the text. Format response strictly as a JSON array of objects with keys "owner", "task", "deadline". If none, return empty array []. Text:\n${text}`
+      );
+      const content = response.response.text() || '[]';
+      const cleaned = content.replace(/```json/g, '').replace(/```/g, '').trim();
+      return JSON.parse(cleaned);
+    } catch (err: any) {
+      log('ERROR', `Gemini action items extraction failed: ${err.message}. Trying Claude.`);
     }
-    return actionItems;
   }
 
-  try {
-    const response = await anthropic.messages.create({
-      model: 'claude-3-5-sonnet-20241022',
-      max_tokens: 300,
-      messages: [
-        {
-          role: 'user',
-          content: `Extract action items from the text. Format response strictly as a JSON array of objects with keys "owner", "task", "deadline". If none, return empty array []. Text:\n${text}`
-        }
-      ]
-    });
-    
-    const content = response.content[0].type === 'text' ? response.content[0].text : '[]';
-    // Clean markdown if present
-    const cleaned = content.replace(/```json/g, '').replace(/```/g, '').trim();
-    return JSON.parse(cleaned);
-  } catch (err: any) {
-    log('ERROR', `Claude call failed: ${err.message}. Using fallback regex.`);
-    return extractActionItemsFallback(text);
+  if (anthropic) {
+    try {
+      const response = await anthropic.messages.create({
+        model: 'claude-3-5-sonnet-20241022',
+        max_tokens: 300,
+        messages: [
+          {
+            role: 'user',
+            content: `Extract action items from the text. Format response strictly as a JSON array of objects with keys "owner", "task", "deadline". If none, return empty array []. Text:\n${text}`
+          }
+        ]
+      });
+      
+      const content = response.content[0].type === 'text' ? response.content[0].text : '[]';
+      const cleaned = content.replace(/```json/g, '').replace(/```/g, '').trim();
+      return JSON.parse(cleaned);
+    } catch (err: any) {
+      log('ERROR', `Claude call failed: ${err.message}. Using fallback regex.`);
+    }
   }
+
+  return extractActionItemsFallback(text);
 }
 
 function extractActionItemsFallback(text: string): ExtractedActionItem[] {
-  // Simple fallback logic
+  // Fallback: regex for will|should|by [date]
+  const actionItems: ExtractedActionItem[] = [];
   const sentences = splitIntoSentences(text);
-  const items: ExtractedActionItem[] = [];
-  for (const s of sentences) {
-    if (s.toLowerCase().includes('will') || s.toLowerCase().includes('should')) {
-      items.push({
-        owner: 'System Fallback',
-        task: s,
-        deadline: 'TBD'
-      });
+  
+  for (const sentence of sentences) {
+    const hasWill = /\bwill\b/i.test(sentence);
+    const hasShould = /\bshould\b/i.test(sentence);
+    const hasBy = /\bby\s+(\w+)\b/i.test(sentence);
+    
+    if (hasWill || hasShould || hasBy) {
+      const words = sentence.split(/\s+/);
+      let owner = 'Team';
+      
+      for (let i = 0; i < words.length; i++) {
+        const w = words[i].replace(/[^\w]/g, '');
+        if (w.length > 1 && w[0] === w[0].toUpperCase() && i > 0 && w !== 'I' && w !== 'We' && w !== 'The' && w !== 'Then') {
+          owner = w;
+          break;
+        }
+      }
+      
+      if (owner === 'Team' && words.length > 0) {
+        const w = words[0].replace(/[^\w]/g, '');
+        if (w.length > 1 && w[0] === w[0].toUpperCase() && w !== 'I' && w !== 'We' && w !== 'The' && w !== 'Then') {
+          owner = w;
+        }
+      }
+
+      let task = sentence;
+      const matchIndex = sentence.toLowerCase().indexOf('will');
+      const shouldIndex = sentence.toLowerCase().indexOf('should');
+      
+      if (matchIndex > -1) {
+        task = sentence.substring(matchIndex + 4).trim();
+      } else if (shouldIndex > -1) {
+        task = sentence.substring(shouldIndex + 6).trim();
+      }
+      
+      let deadline = 'Friday';
+      const byMatch = sentence.match(/\bby\s+(\w+(\s+\w+)?)\b/i);
+      if (byMatch) {
+        deadline = byMatch[1].replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, '');
+      }
+
+      task = task.charAt(0).toUpperCase() + task.slice(1);
+      actionItems.push({ owner, task, deadline });
     }
   }
-  return items;
+  return actionItems;
 }
 
 // 5. MEETING NOTES SUMMARIZATION
@@ -301,67 +352,78 @@ export interface MeetingSummary {
 }
 
 export async function summarizeMeetingNotes(transcript: string): Promise<MeetingSummary> {
-  if (!anthropic) {
-    // Fallback: local processing
-    const sentences = splitIntoSentences(transcript);
-    const decisions: string[] = [];
-    const constraints: string[] = [];
-    const metrics: string[] = [];
-    const owners: string[] = [];
-
-    sentences.forEach(s => {
-      const ls = s.toLowerCase();
-      if (ls.includes('decide') || ls.includes('agreed') || ls.includes('use')) {
-        decisions.push(s);
-      }
-      if (ls.includes('limit') || ls.includes('must') || ls.includes('constraint') || ls.includes('restrict')) {
-        constraints.push(s);
-      }
-      if (ls.includes('metric') || ls.includes('kpi') || ls.includes('percent') || ls.includes('%') || ls.includes('revenue') || ls.includes('users')) {
-        metrics.push(s);
-      }
-      // Check for ownership
-      const willMatch = s.match(/(\b[A-Z][a-z]+\b)\s+will/);
-      if (willMatch && !['We', 'They', 'The'].includes(willMatch[1])) {
-        owners.push(willMatch[1]);
-      }
-    });
-
-    return {
-      overview: `Meeting overview summary. Transcript contains ${transcript.split(/\s+/).length} words.`,
-      decisions: decisions.slice(0, 3),
-      constraints: constraints.slice(0, 3),
-      metrics: metrics.slice(0, 3),
-      owners: Array.from(new Set(owners))
-    };
-  }
-
-  try {
-    const response = await anthropic.messages.create({
-      model: 'claude-3-5-sonnet-20241022',
-      max_tokens: 1000,
-      messages: [
-        {
-          role: 'user',
-          content: `Summarize this meeting. Extract: key decisions, technical constraints, business metrics, owners. Keep niche details.
+  if (gemini) {
+    try {
+      const model = gemini.getGenerativeModel({
+        model: 'gemini-1.5-flash',
+        generationConfig: { responseMimeType: 'application/json' }
+      });
+      const response = await model.generateContent(
+        `Summarize this meeting. Extract: key decisions, technical constraints, business metrics, owners. Keep niche details.
 Return strictly as a JSON object with keys: "overview" (string), "decisions" (array of strings), "constraints" (array of strings), "metrics" (array of strings), "owners" (array of strings). Transcript:\n${transcript}`
-        }
-      ]
-    });
-    
-    const content = response.content[0].type === 'text' ? response.content[0].text : '{}';
-    const cleaned = content.replace(/```json/g, '').replace(/```/g, '').trim();
-    return JSON.parse(cleaned);
-  } catch (err: any) {
-    log('ERROR', `Claude meeting summary failed: ${err.message}. Using fallback.`);
-    return {
-      overview: `Fallback Overview: Summary of meeting notes (${transcript.length} chars).`,
-      decisions: ['Use default SQL database'],
-      constraints: ['Deploy within 48 hours'],
-      metrics: ['Load time < 2s'],
-      owners: ['Rahul', 'Sarah']
-    };
+      );
+      const content = response.response.text() || '{}';
+      const cleaned = content.replace(/```json/g, '').replace(/```/g, '').trim();
+      return JSON.parse(cleaned);
+    } catch (err: any) {
+      log('ERROR', `Gemini meeting summary failed: ${err.message}. Trying Claude.`);
+    }
   }
+
+  if (anthropic) {
+    try {
+      const response = await anthropic.messages.create({
+        model: 'claude-3-5-sonnet-20241022',
+        max_tokens: 1000,
+        messages: [
+          {
+            role: 'user',
+            content: `Summarize this meeting. Extract: key decisions, technical constraints, business metrics, owners. Keep niche details.
+Return strictly as a JSON object with keys: "overview" (string), "decisions" (array of strings), "constraints" (array of strings), "metrics" (array of strings), "owners" (array of strings). Transcript:\n${transcript}`
+          }
+        ]
+      });
+      
+      const content = response.content[0].type === 'text' ? response.content[0].text : '{}';
+      const cleaned = content.replace(/```json/g, '').replace(/```/g, '').trim();
+      return JSON.parse(cleaned);
+    } catch (err: any) {
+      log('ERROR', `Claude meeting summary failed: ${err.message}. Using fallback.`);
+    }
+  }
+
+  // Fallback: local processing
+  const sentences = splitIntoSentences(transcript);
+  const decisions: string[] = [];
+  const constraints: string[] = [];
+  const metrics: string[] = [];
+  const owners: string[] = [];
+
+  sentences.forEach(s => {
+    const ls = s.toLowerCase();
+    if (ls.includes('decide') || ls.includes('agreed') || ls.includes('use')) {
+      decisions.push(s);
+    }
+    if (ls.includes('limit') || ls.includes('must') || ls.includes('constraint') || ls.includes('restrict')) {
+      constraints.push(s);
+    }
+    if (ls.includes('metric') || ls.includes('kpi') || ls.includes('percent') || ls.includes('%') || ls.includes('revenue') || ls.includes('users')) {
+      metrics.push(s);
+    }
+    // Check for ownership
+    const willMatch = s.match(/(\b[A-Z][a-z]+\b)\s+will/);
+    if (willMatch && !['We', 'They', 'The'].includes(willMatch[1])) {
+      owners.push(willMatch[1]);
+    }
+  });
+
+  return {
+    overview: `Meeting overview summary. Transcript contains ${transcript.split(/\s+/).length} words.`,
+    decisions: decisions.slice(0, 3),
+    constraints: constraints.slice(0, 3),
+    metrics: metrics.slice(0, 3),
+    owners: Array.from(new Set(owners))
+  };
 }
 
 // 6. BLOCKER AND CIRCULAR DEPENDENCY DETECTION
@@ -373,11 +435,6 @@ export interface BlockerReport {
 export async function detectBlockers(
   tasks: Array<{ id: string; title: string; dependencies?: string[]; status: string; updated_at?: string | Date }>
 ): Promise<BlockerReport> {
-  
-  // We can do standard Tarjan's or simple DFS for circular dependency detection locally!
-  // This is highly reliable and doesn't even need Claude if we write the graph algorithm properly.
-  // We will run the graph algorithm locally as the primary method, and use Claude as a fallback/augmenter.
-  
   const circularDependencies: string[][] = [];
   const blockedTasks: Array<{ taskId: string; reason: string }> = [];
 
@@ -444,7 +501,6 @@ export async function detectBlockers(
         reason: `Waiting on incomplete dependencies: ${names}`
       });
     } else if (t.status === 'blocked') {
-      // If manually set to blocked or has been stuck
       const updatedAtMs = t.updated_at ? new Date(t.updated_at).getTime() : Date.now();
       if (updatedAtMs < oneDayAgo) {
         blockedTasks.push({
@@ -465,7 +521,6 @@ export async function detectBlockers(
     cycle.forEach(taskId => {
       const task = taskMap.get(taskId);
       const cycleNames = cycle.map(id => `"${taskMap.get(id)?.title}"`).join(' -> ');
-      // Check if already has a blocker reason
       const existing = blockedTasks.find(bt => bt.taskId === taskId);
       if (existing) {
         existing.reason += ` (Part of circular dependency: ${cycleNames})`;
@@ -478,11 +533,19 @@ export async function detectBlockers(
     });
   });
 
-  // If Claude is active, we can also query it to see if it identifies higher level process blockers
-  // or double checks the dependencies. But graph calculation is exact.
-  if (anthropic && tasks.length > 0) {
+  if (gemini && tasks.length > 0) {
     try {
-      const response = await anthropic.messages.create({
+      const model = gemini.getGenerativeModel({ model: 'gemini-1.5-flash' });
+      await model.generateContent(
+        `Identify circular dependencies and blockers in this task list. Explain them in a friendly startup dashboard format. Tasks:\n${JSON.stringify(tasks, null, 2)}`
+      );
+      log('INFO', 'Gemini blocker analysis completed.');
+    } catch (err: any) {
+      log('ERROR', `Gemini blocker analysis failed: ${err.message}`);
+    }
+  } else if (anthropic && tasks.length > 0) {
+    try {
+      await anthropic.messages.create({
         model: 'claude-3-5-sonnet-20241022',
         max_tokens: 500,
         messages: [
@@ -492,7 +555,6 @@ export async function detectBlockers(
           }
         ]
       });
-      // Just log Claude's analysis for auditing, but we use the exact graph results.
       log('INFO', 'Claude blocker analysis completed.');
     } catch (err: any) {
       log('ERROR', `Claude blocker analysis failed: ${err.message}`);
@@ -514,55 +576,99 @@ export async function generateProjectBreakdown(
   
   const combinedNotes = meetingNotes.join('\n');
 
-  if (!anthropic) {
-    // Fallback: Generate structured tasks based on description keywords
-    const tasks = [
-      { title: `Design database schema for ${ideaTitle}`, assignedTo: 'Rahul', dependencies: [] },
-      { title: `Develop core backend endpoints for ${ideaTitle}`, assignedTo: 'Rahul', dependencies: [`db_design`] },
-      { title: `Build React dashboard components for ${ideaTitle}`, assignedTo: 'Sarah', dependencies: [] },
-      { title: `Integrate frontend with backend APIs`, assignedTo: 'Sarah', dependencies: [`backend_dev`, `frontend_dev`] },
-      { title: `Conduct end-to-end integration testing and deploy`, assignedTo: 'Team', dependencies: [`frontend_integration`] }
-    ];
-
-    // Map dependency helper tokens to UUIDs dynamically in route layer if needed.
-    // For MVP, we will return these task templates.
-    return {
-      description: `Requirements generated from idea and meeting notes:\n- Focus on core MVP elements: ${ideaDescription.slice(0, 100)}.\n- Meet constraints defined in workspace logs.`,
-      tasks: tasks.map(t => ({
-        title: t.title,
-        assignedTo: t.assignedTo
-      }))
-    };
-  }
-
-  try {
-    const response = await anthropic.messages.create({
-      model: 'claude-3-5-sonnet-20241022',
-      max_tokens: 1000,
-      messages: [
-        {
-          role: 'user',
-          content: `Convert this startup idea into a project. Auto-generate product requirements from linked meeting notes. Then auto-breakdown into 4-5 tasks.
+  if (gemini) {
+    try {
+      const model = gemini.getGenerativeModel({
+        model: 'gemini-1.5-flash',
+        generationConfig: { responseMimeType: 'application/json' }
+      });
+      const response = await model.generateContent(
+        `Convert this startup idea into a project. Auto-generate product requirements from linked meeting notes. Then auto-breakdown into 4-5 tasks.
 Idea: ${ideaTitle} - ${ideaDescription}
 Meeting Notes:\n${combinedNotes}
 
 Return response strictly as a JSON object with keys: "description" (string, overview of requirements), "tasks" (array of objects with keys "title", "assignedTo").`
-        }
-      ]
-    });
-    
-    const content = response.content[0].type === 'text' ? response.content[0].text : '{}';
-    const cleaned = content.replace(/```json/g, '').replace(/```/g, '').trim();
-    return JSON.parse(cleaned);
-  } catch (err: any) {
-    log('ERROR', `Claude project generation failed: ${err.message}. Using fallback.`);
-    return {
-      description: `Requirements for ${ideaTitle}: ${ideaDescription}`,
-      tasks: [
-        { title: 'Setup project workspace', assignedTo: 'Team' },
-        { title: 'Implement database models', assignedTo: 'Rahul' },
-        { title: 'Create dashboard frontend UI', assignedTo: 'Sarah' }
-      ]
-    };
+      );
+      const content = response.response.text() || '{}';
+      const cleaned = content.replace(/```json/g, '').replace(/```/g, '').trim();
+      return JSON.parse(cleaned);
+    } catch (err: any) {
+      log('ERROR', `Gemini project generation failed: ${err.message}. Trying Claude.`);
+    }
   }
+
+  if (anthropic) {
+    try {
+      const response = await anthropic.messages.create({
+        model: 'claude-3-5-sonnet-20241022',
+        max_tokens: 1000,
+        messages: [
+          {
+            role: 'user',
+            content: `Convert this startup idea into a project. Auto-generate product requirements from linked meeting notes. Then auto-breakdown into 4-5 tasks.
+Idea: ${ideaTitle} - ${ideaDescription}
+Meeting Notes:\n${combinedNotes}
+
+Return response strictly as a JSON object with keys: "description" (string, overview of requirements), "tasks" (array of objects with keys "title", "assignedTo").`
+          }
+        ]
+      });
+      
+      const content = response.content[0].type === 'text' ? response.content[0].text : '{}';
+      const cleaned = content.replace(/```json/g, '').replace(/```/g, '').trim();
+      return JSON.parse(cleaned);
+    } catch (err: any) {
+      log('ERROR', `Claude project generation failed: ${err.message}. Using fallback.`);
+    }
+  }
+
+  // Fallback: Generate structured tasks based on description keywords
+  const tasks = [
+    { title: `Design database schema for ${ideaTitle}`, assignedTo: 'Rahul', dependencies: [] },
+    { title: `Develop core backend endpoints for ${ideaTitle}`, assignedTo: 'Rahul', dependencies: [`db_design`] },
+    { title: `Build React dashboard components for ${ideaTitle}`, assignedTo: 'Sarah', dependencies: [] },
+    { title: `Integrate frontend with backend APIs`, assignedTo: 'Sarah', dependencies: [`backend_dev`, `frontend_dev`] },
+    { title: `Conduct end-to-end integration testing and deploy`, assignedTo: 'Team', dependencies: [`frontend_integration`] }
+  ];
+
+  return {
+    description: `Requirements generated from idea and meeting notes:\n- Focus on core MVP elements: ${ideaDescription.slice(0, 100)}.\n- Meet constraints defined in workspace logs.`,
+    tasks: tasks.map(t => ({
+      title: t.title,
+      assignedTo: t.assignedTo
+    }))
+  };
+}
+
+// 8. BRIEFING GENERATION
+export async function generateBriefing(context: string): Promise<string> {
+  if (gemini) {
+    try {
+      const model = gemini.getGenerativeModel({ model: 'gemini-1.5-flash' });
+      const response = await model.generateContent(
+        `You are a startup workspace assistant. Write a concise daily briefing for the team based on this workspace snapshot. Format the response as 3-5 bullet points. Each bullet should be one short, action-oriented sentence. Start each bullet with •.\n\n${context}`
+      );
+      return response.response.text() || '';
+    } catch (err: any) {
+      log('ERROR', `Gemini briefing failed: ${err.message}. Trying Claude.`);
+    }
+  }
+
+  if (anthropic) {
+    try {
+      const response = await anthropic.messages.create({
+        model: 'claude-3-5-sonnet-20241022',
+        max_tokens: 400,
+        messages: [{
+          role: 'user',
+          content: `You are a startup workspace assistant. Write a concise daily briefing for the team based on this workspace snapshot. Format the response as 3-5 bullet points. Each bullet should be one short, action-oriented sentence. Start each bullet with •.\n\n${context}`
+        }]
+      });
+      return response.content[0]?.type === 'text' ? response.content[0].text : '';
+    } catch (err: any) {
+      log('ERROR', `Claude briefing failed: ${err.message}.`);
+    }
+  }
+
+  return '';
 }

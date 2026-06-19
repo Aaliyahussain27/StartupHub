@@ -1052,7 +1052,7 @@ router.get('/briefing', async (req: Request, res: Response, next: NextFunction) 
       db.getProjects(workspaceId),
     ]);
 
-    const { detectBlockers, isClaudeActive } = await import('../services/claude');
+    const { detectBlockers, isClaudeActive, getAIProvider } = await import('../services/claude');
     const blockerReport = await detectBlockers(tasks);
 
     const pendingActions = actionItems.filter((a: any) => a.status !== 'completed');
@@ -1078,19 +1078,10 @@ Workspace Snapshot:
 
     if (isClaudeActive()) {
       try {
-        const Anthropic = require('@anthropic-ai/sdk');
-        const client = new Anthropic({ apiKey: process.env.CLAUDE_API_KEY });
-        const response = await client.messages.create({
-          model: 'claude-3-5-sonnet-20241022',
-          max_tokens: 400,
-          messages: [{
-            role: 'user',
-            content: `You are a startup workspace assistant. Write a concise daily briefing for the team based on this workspace snapshot. Format the response as 3-5 bullet points. Each bullet should be one short, action-oriented sentence. Start each bullet with •.\n\n${context}`
-          }]
-        });
-        summary = response.content[0]?.type === 'text' ? response.content[0].text : '';
+        const { generateBriefing } = await import('../services/claude');
+        summary = await generateBriefing(context);
       } catch (err: any) {
-        log('WARN', `Claude briefing failed: ${err.message}`);
+        log('WARN', `AI briefing failed: ${err.message}`);
       }
     }
 
@@ -1119,6 +1110,8 @@ Workspace Snapshot:
       summary,
       highlights: highlights.slice(0, 6),
       generatedAt: new Date().toISOString(),
+      aiActive: isClaudeActive(),
+      aiProvider: getAIProvider()
     });
 
   } catch (err: any) {
